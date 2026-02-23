@@ -4,4 +4,6 @@ export const KEYS = {
   REMINDERS: "@feed/reminders",
   THEME: "@feed/theme",
   LOCALE: "@feed/locale",
+  BACKUP_EMAIL: "@feed/backup_email",
+  BACKUP_EMAIL_SUBJECT: "@feed/backup_email_subject",
 } as const;

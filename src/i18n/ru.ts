@@ -20,6 +20,16 @@ export const ru: Record<TranslationKey, string> = {
   backupInvalidBackupFormat: "Некорректный формат резервной копии",
   backupNoData: "В резервной копии нет допустимых данных",
   backupExportDialogTitle: "Экспорт данных",
+  backupEmailNotConfigured: "Укажите email в разделе «Резервная копия по email»",
+  backupMailUnavailable: "Почта недоступна на этом устройстве",
+  backupMailSent: "Письмо отправлено",
+  backupMailCancelled: "Отправка отменена",
+  backupSendToEmail: "Отправить на email",
+
+  settingsBackupByEmail: "Резервная копия по email",
+  settingsBackupByEmailSubtitle: "Отправить файл резервной копии на вашу почту",
+  settingsBackupEmailPlaceholder: "Адрес email",
+  settingsBackupSubjectPlaceholder: "Тема (необязательно)",
 
   mainScreenTitle: "Кормление",
   mainChangeDate: "Изменить дату",

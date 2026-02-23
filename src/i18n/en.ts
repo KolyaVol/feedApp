@@ -18,6 +18,16 @@ export const en = {
   backupInvalidBackupFormat: "Invalid backup format",
   backupNoData: "Backup contains no valid data",
   backupExportDialogTitle: "Export feed data",
+  backupEmailNotConfigured: "Set email in Backup by email section",
+  backupMailUnavailable: "Mail is not available on this device",
+  backupMailSent: "Mail sent",
+  backupMailCancelled: "Mail cancelled",
+  backupSendToEmail: "Send to email",
+
+  settingsBackupByEmail: "Backup by email",
+  settingsBackupByEmailSubtitle: "Send backup file to your email",
+  settingsBackupEmailPlaceholder: "Email address",
+  settingsBackupSubjectPlaceholder: "Subject (optional)",
 
   mainScreenTitle: "Baby Feed",
   mainChangeDate: "Change date",
