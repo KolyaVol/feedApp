@@ -6,15 +6,6 @@ import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
 import { fonts } from "../theme";
 
-function isLightBg(hex: string): boolean {
-  const m = hex.replace(/^#/, "").match(/.{2}/g);
-  if (!m) return false;
-  const r = parseInt(m[0], 16) / 255;
-  const g = parseInt(m[1], 16) / 255;
-  const b = parseInt(m[2], 16) / 255;
-  return 0.299 * r + 0.587 * g + 0.114 * b > 0.55;
-}
-
 interface DonutChartProps {
   data: AggregatedFood[];
   centerLabel?: string;
@@ -34,11 +25,21 @@ export function DonutChart({ data, centerLabel }: DonutChartProps) {
     [colors],
   );
 
+  const centerHoleSize = size * 0.33;
   const styles = React.useMemo(
     () =>
       StyleSheet.create({
         wrap: { alignItems: "center", justifyContent: "center" },
         chartBox: { alignItems: "center", justifyContent: "center" },
+        centerHole: {
+          position: "absolute",
+          width: centerHoleSize,
+          height: centerHoleSize,
+          borderRadius: centerHoleSize / 2,
+          backgroundColor: colors.card,
+          alignItems: "center",
+          justifyContent: "center",
+        },
         centerLabel: { alignItems: "center", justifyContent: "center" },
         empty: {
           alignItems: "center",
@@ -67,7 +68,7 @@ export function DonutChart({ data, centerLabel }: DonutChartProps) {
           fontFamily: fonts.medium,
         },
       }),
-    [colors],
+    [colors, centerHoleSize],
   );
 
   if (!data.length) {
@@ -80,11 +81,6 @@ export function DonutChart({ data, centerLabel }: DonutChartProps) {
 
   const chartData = data.map((d) => ({ name: d.name, amount: d.amount, color: d.color }));
   const paddingLeft = Math.round(size / 4);
-  const dominantColor = data.length
-    ? data.reduce((a, b) => (a.amount >= b.amount ? a : b)).color
-    : null;
-  const useDarkCenterText = dominantColor != null && isLightBg(dominantColor);
-
   return (
     <View style={styles.wrap}>
       <View style={[styles.chartBox, { width: size, height: size }]}>
@@ -99,18 +95,18 @@ export function DonutChart({ data, centerLabel }: DonutChartProps) {
           hasLegend={false}
           chartConfig={chartConfig}
         />
-        {centerLabel != null && (
-          <View style={[StyleSheet.absoluteFill, styles.centerLabel]}>
-            <Text style={[g.chartCenterText, useDarkCenterText && { color: "#333" }]}>{centerLabel}</Text>
-          </View>
-        )}
+        <View style={[styles.centerHole, styles.centerLabel]}>
+          {centerLabel != null ? (
+            <Text style={[g.chartCenterText, { color: colors.text }]}>{centerLabel}</Text>
+          ) : null}
+        </View>
       </View>
       <View style={styles.legendRow}>
         {data.map((item) => (
           <View key={item.foodTypeId} style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: item.color }]} />
             <Text style={styles.legendText}>
-              {item.amount} {item.unit}
+              {item.name} {item.amount} {item.unit}
             </Text>
           </View>
         ))}

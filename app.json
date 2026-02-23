@@ -21,16 +21,28 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.volnaaa.feed"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/icon.png"
     },
     "plugins": [
       "@react-native-community/datetimepicker",
       "expo-notifications",
       "expo-font",
-      "expo-mail-composer"
-    ]
+      "expo-mail-composer",
+      [
+        "expo-dev-client",
+        {
+          "launchMode": "most-recent"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "919b9568-57b7-4f1a-b4fa-9d306b4164b1"
+      }
+    }
   }
 }

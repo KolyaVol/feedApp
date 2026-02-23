@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
+import * as DevClient from "expo-dev-client";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { Text, View } from "react-native";
+import { Text, View, Platform } from "react-native";
 import {
   Nunito_400Regular,
   Nunito_500Medium,
@@ -33,10 +34,30 @@ const TAB_CONFIG: {
   component: React.ComponentType<any>;
 }[] = [
   { name: "Home", labelKey: "tabsHome", titleKey: "screenTitlesBabyFeed", component: () => null },
-  { name: "Stats", labelKey: "tabsStats", titleKey: "screenTitlesStatistics", component: StatisticsScreen },
-  { name: "FoodTypes", labelKey: "tabsTypes", titleKey: "screenTitlesFoodTypes", component: FoodTypesScreen },
-  { name: "Reminders", labelKey: "tabsReminders", titleKey: "tabsReminders", component: RemindersScreen },
-  { name: "Settings", labelKey: "tabsSettings", titleKey: "settingsTitle", component: SettingsScreen },
+  {
+    name: "Stats",
+    labelKey: "tabsStats",
+    titleKey: "screenTitlesStatistics",
+    component: StatisticsScreen,
+  },
+  {
+    name: "FoodTypes",
+    labelKey: "tabsTypes",
+    titleKey: "screenTitlesFoodTypes",
+    component: FoodTypesScreen,
+  },
+  {
+    name: "Reminders",
+    labelKey: "tabsReminders",
+    titleKey: "tabsReminders",
+    component: RemindersScreen,
+  },
+  {
+    name: "Settings",
+    labelKey: "tabsSettings",
+    titleKey: "settingsTitle",
+    component: SettingsScreen,
+  },
 ];
 
 function HomeStack() {
@@ -133,6 +154,12 @@ export default function App() {
     Nunito_600SemiBold,
     Nunito_700Bold,
   });
+
+  useEffect(() => {
+    if (__DEV__ && Platform.OS !== "web") {
+      DevClient.hideMenu();
+    }
+  }, []);
 
   if (!fontsLoaded) return null;
 
