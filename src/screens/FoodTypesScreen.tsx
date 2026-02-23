@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -15,18 +15,27 @@ import { useFoodTypes } from "../hooks/useFoodTypes";
 import type { FoodType, FoodPriority } from "../types";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
-import { foodTypePresetColors, spacing } from "../theme";
+import { useLocale } from "../contexts/LocaleContext";
+import { foodTypePresetColors, fonts, spacing } from "../theme";
+import type { TranslationKey } from "../i18n/en";
 
-const PRIORITY_OPTIONS: { value: FoodPriority | ""; label: string }[] = [
-  { value: "", label: "No priority" },
-  { value: "low", label: "Low" },
-  { value: "middle", label: "Middle" },
-  { value: "high", label: "High" },
+const PRIORITY_OPTIONS: { value: FoodPriority | ""; labelKey: TranslationKey }[] = [
+  { value: "", labelKey: "foodTypesNoPriority" },
+  { value: "low", labelKey: "foodTypesLow" },
+  { value: "middle", labelKey: "foodTypesMiddle" },
+  { value: "high", labelKey: "foodTypesHigh" },
 ];
+
+const PRIORITY_LABEL_KEYS: Record<FoodPriority, TranslationKey> = {
+  low: "foodTypesLow",
+  middle: "foodTypesMiddle",
+  high: "foodTypesHigh",
+};
 
 export function FoodTypesScreen() {
   const insets = useSafeAreaInsets();
   const g = useGlobalStyles();
+  const { t } = useLocale();
   const { colors } = useTheme();
   const styles = useFoodTypesScreenStyles(colors);
   const { foodTypes, addFoodType, updateFoodType, deleteFoodType } = useFoodTypes();
@@ -37,6 +46,53 @@ export function FoodTypesScreen() {
   const [color, setColor] = useState<string>(foodTypePresetColors[0]);
   const [priority, setPriority] = useState<FoodPriority | "">("");
   const [weeklyMinimumAmount, setWeeklyMinimumAmount] = useState("");
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showRandomColorBtn, setShowRandomColorBtn] = useState(false);
+  const sameColorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timer = setTimeout(() => setToastMessage(null), 3000);
+    return () => clearTimeout(timer);
+  }, [toastMessage]);
+
+  const existingWithSameColor = foodTypes.filter(
+    (f) => f.color === color && f.id !== (editing?.id ?? "")
+  );
+  const hasDuplicateColor = existingWithSameColor.length > 0;
+
+  useEffect(() => {
+    if (!modalVisible || !hasDuplicateColor) {
+      setShowRandomColorBtn(false);
+      if (sameColorTimerRef.current) {
+        clearTimeout(sameColorTimerRef.current);
+        sameColorTimerRef.current = null;
+      }
+      return;
+    }
+    sameColorTimerRef.current = setTimeout(() => setShowRandomColorBtn(true), 5000);
+    return () => {
+      if (sameColorTimerRef.current) {
+        clearTimeout(sameColorTimerRef.current);
+        sameColorTimerRef.current = null;
+      }
+    };
+  }, [modalVisible, hasDuplicateColor, color]);
+
+  const pickRandomUnusedColor = () => {
+    const used = new Set(
+      foodTypes.filter((f) => f.id !== editing?.id).map((f) => f.color)
+    );
+    const available = foodTypePresetColors.filter((c) => !used.has(c));
+    if (available.length) {
+      setColor(available[Math.floor(Math.random() * available.length)]);
+      setShowRandomColorBtn(false);
+      if (sameColorTimerRef.current) {
+        clearTimeout(sameColorTimerRef.current);
+        sameColorTimerRef.current = null;
+      }
+    }
+  };
 
   const openAdd = () => {
     setEditing(null);
@@ -45,6 +101,8 @@ export function FoodTypesScreen() {
     setColor(foodTypePresetColors[0]);
     setPriority("");
     setWeeklyMinimumAmount("");
+    setToastMessage(null);
+    setShowRandomColorBtn(false);
     setModalVisible(true);
   };
 
@@ -57,21 +115,42 @@ export function FoodTypesScreen() {
     setWeeklyMinimumAmount(
       item.weeklyMinimumAmount != null ? String(item.weeklyMinimumAmount) : "",
     );
+    setToastMessage(null);
+    setShowRandomColorBtn(false);
     setModalVisible(true);
   };
 
   const save = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setToastMessage(t("foodTypesEnterName"));
+      return;
+    }
+    const trimmedUnit = unit.trim();
+    if (!trimmedUnit) {
+      setToastMessage(t("foodTypesEnterUnit"));
+      return;
+    }
+    const weeklyNum =
+      weeklyMinimumAmount.trim() === ""
+        ? undefined
+        : parseInt(weeklyMinimumAmount, 10);
+    if (
+      weeklyMinimumAmount.trim() !== "" &&
+      (weeklyNum === undefined || Number.isNaN(weeklyNum) || weeklyNum < 0)
+    ) {
+      setToastMessage(t("foodTypesWeeklyMinPositive"));
+      return;
+    }
     const payload = {
-      name: trimmed,
-      unit,
+      name: trimmedName,
+      unit: trimmedUnit,
       color,
       priority: priority || undefined,
-      weeklyMinimumAmount:
-        weeklyMinimumAmount.trim() === "" ? undefined : parseInt(weeklyMinimumAmount, 10),
+      ...(weeklyNum !== undefined && !Number.isNaN(weeklyNum)
+        ? { weeklyMinimumAmount: weeklyNum }
+        : {}),
     };
-    if (Number.isNaN(payload.weeklyMinimumAmount)) payload.weeklyMinimumAmount = undefined;
     if (editing) {
       await updateFoodType(editing.id, payload);
     } else {
@@ -80,18 +159,24 @@ export function FoodTypesScreen() {
     setModalVisible(false);
   };
 
+  const saveDisabled = !name.trim();
+
   const remove = (item: FoodType) => {
-    Alert.alert("Delete", `Remove "${item.name}"?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deleteFoodType(item.id) },
-    ]);
+    Alert.alert(
+      t("foodTypesDeleteConfirmTitle"),
+      t("foodTypesDeleteConfirmMessage", { name: item.name }),
+      [
+        { text: t("foodTypesCancel"), style: "cancel" },
+        { text: t("foodTypesDelete"), style: "destructive", onPress: () => deleteFoodType(item.id) },
+      ],
+    );
   };
 
   return (
     <View style={g.screenContainer}>
-      <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>Food types</Text>
+      <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>{t("foodTypesScreenTitle")}</Text>
       <TouchableOpacity style={g.primaryButton} onPress={openAdd}>
-        <Text style={g.primaryButtonText}>+ Add new variant</Text>
+        <Text style={g.primaryButtonText}>{t("foodTypesAddNewVariant")}</Text>
       </TouchableOpacity>
       <FlatList
         data={foodTypes}
@@ -104,17 +189,17 @@ export function FoodTypesScreen() {
               <Text style={g.titleCard}>{item.name}</Text>
               <Text style={g.subtitle}>
                 {item.unit}
-                {item.priority != null ? ` · ${item.priority}` : ""}
+                {item.priority != null ? ` · ${t(PRIORITY_LABEL_KEYS[item.priority])}` : ""}
                 {item.weeklyMinimumAmount != null
-                  ? ` · ${item.weeklyMinimumAmount} ${item.unit}/week min`
+                  ? ` · ${item.weeklyMinimumAmount} ${item.unit}${t("foodTypesWeeklyMinSuffix")}`
                   : ""}
               </Text>
             </View>
             <TouchableOpacity onPress={() => openEdit(item)} style={g.actionBtn}>
-              <Text style={g.linkText}>Edit</Text>
+              <Text style={g.linkText}>{t("foodTypesEdit")}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => remove(item)} style={g.actionBtn}>
-              <Text style={g.deleteText}>Delete</Text>
+              <Text style={g.deleteText}>{t("foodTypesDelete")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -122,12 +207,17 @@ export function FoodTypesScreen() {
       <Modal visible={modalVisible} animationType="slide" transparent>
         <View style={g.modalOverlay}>
           <View style={g.modal}>
-            <Text style={g.modalTitle}>{editing ? "Edit type" : "New food type"}</Text>
+            {toastMessage ? (
+              <View style={styles.toast}>
+                <Text style={styles.toastText}>{toastMessage}</Text>
+              </View>
+            ) : null}
+            <Text style={g.modalTitle}>{editing ? t("foodTypesEditType") : t("foodTypesNewFoodType")}</Text>
             <TextInput
               style={[g.input, g.inputWithMargin]}
               value={name}
               onChangeText={setName}
-              placeholder="Name (e.g. Breast, Formula)"
+              placeholder={t("foodTypesNamePlaceholder")}
               placeholderTextColor={colors.placeholder}
               autoCapitalize="words"
             />
@@ -135,12 +225,12 @@ export function FoodTypesScreen() {
               style={[g.input, g.inputWithMargin]}
               value={unit}
               onChangeText={setUnit}
-              placeholder="Unit (ml, g, portion)"
+              placeholder={t("foodTypesUnitPlaceholder")}
               placeholderTextColor={colors.placeholder}
             />
-            <Text style={[g.labelMuted, styles.optionalLabel]}>Priority (optional)</Text>
+            <Text style={[g.labelMuted, styles.optionalLabel]}>{t("foodTypesPriorityOptional")}</Text>
             <View style={styles.priorityRow}>
-              {PRIORITY_OPTIONS.map(({ value, label }) => (
+              {PRIORITY_OPTIONS.map(({ value, labelKey }) => (
                 <TouchableOpacity
                   key={value || "none"}
                   style={[styles.priorityChip, priority === value && styles.priorityChipSelected]}
@@ -152,13 +242,13 @@ export function FoodTypesScreen() {
                       priority === value && styles.priorityChipTextSelected,
                     ]}
                   >
-                    {label}
+                    {t(labelKey)}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
             <Text style={[g.labelMuted, styles.optionalLabel]}>
-              Weekly minimum amount (optional)
+              {t("foodTypesWeeklyMinOptional")}
             </Text>
             <TextInput
               style={[g.input, g.inputWithMargin]}
@@ -168,7 +258,24 @@ export function FoodTypesScreen() {
               placeholderTextColor={colors.placeholder}
               keyboardType="numeric"
             />
-            <Text style={[g.labelMuted, styles.colorLabel]}>Color</Text>
+            <Text style={[g.labelMuted, styles.colorLabel]}>{t("foodTypesColor")}</Text>
+            {hasDuplicateColor ? (
+              <View style={styles.duplicateColorTip}>
+                <Text style={styles.duplicateColorTipText}>
+                  {t("foodTypesColorUsedBy", {
+                    names: existingWithSameColor.map((f) => f.name).join(", "),
+                  })}
+                </Text>
+                {showRandomColorBtn ? (
+                  <TouchableOpacity
+                    style={styles.randomColorBtn}
+                    onPress={pickRandomUnusedColor}
+                  >
+                    <Text style={styles.randomColorBtnText}>{t("foodTypesChooseRandom")}</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : null}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -202,10 +309,14 @@ export function FoodTypesScreen() {
             </ScrollView>
             <View style={g.modalButtons}>
               <TouchableOpacity style={g.cancelBtn} onPress={() => setModalVisible(false)}>
-                <Text style={g.cancelBtnText}>Cancel</Text>
+                <Text style={g.cancelBtnText}>{t("foodTypesCancel")}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={g.saveBtn} onPress={save}>
-                <Text style={g.saveBtnText}>Save</Text>
+              <TouchableOpacity
+                style={[g.saveBtn, saveDisabled && styles.saveBtnDisabled]}
+                onPress={save}
+                disabled={saveDisabled}
+              >
+                <Text style={g.saveBtnText}>{t("foodTypesSave")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -217,9 +328,12 @@ export function FoodTypesScreen() {
 
 function useFoodTypesScreenStyles(colors: {
   text: string;
+  textMuted: string;
   chipBg: string;
   primary: string;
   card: string;
+  background: string;
+  border: string;
 }) {
   return React.useMemo(
     () =>
@@ -247,6 +361,37 @@ function useFoodTypesScreenStyles(colors: {
         priorityChipSelected: { backgroundColor: colors.primary },
         priorityChipText: { fontSize: 14, color: colors.text },
         priorityChipTextSelected: { color: colors.card, fontWeight: "600" },
+        toast: {
+          backgroundColor: colors.background,
+          borderWidth: 1,
+          borderColor: colors.border,
+          borderRadius: spacing.radiusMd,
+          paddingVertical: 10,
+          paddingHorizontal: 14,
+          marginBottom: 12,
+        },
+        toastText: { fontSize: 14, color: colors.text, fontFamily: fonts.regular },
+        duplicateColorTip: {
+          marginBottom: 10,
+          paddingVertical: 8,
+          paddingHorizontal: 12,
+          backgroundColor: colors.chipBg,
+          borderRadius: spacing.radiusMd,
+        },
+        duplicateColorTipText: {
+          fontSize: 13,
+          color: colors.textMuted,
+          marginBottom: 8,
+        },
+        randomColorBtn: {
+          alignSelf: "flex-start",
+          paddingVertical: 6,
+          paddingHorizontal: 12,
+          backgroundColor: colors.primary,
+          borderRadius: spacing.radiusMd,
+        },
+        randomColorBtnText: { fontSize: 14, color: colors.card, fontWeight: "600" },
+        saveBtnDisabled: { opacity: 0.5 },
       }),
     [colors],
   );

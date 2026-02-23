@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
+import { useLocale } from "../contexts/LocaleContext";
 import { useBackup } from "../hooks/useBackup";
 import { useEntries } from "../hooks/useEntries";
 import { useFoodTypes } from "../hooks/useFoodTypes";
@@ -20,6 +21,7 @@ import { spacing } from "../theme";
 export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const g = useGlobalStyles();
+  const { t, locale, setLocale } = useLocale();
   const { theme, setTheme, colors } = useTheme();
   const isDark = theme === "dark";
   const { refresh: refreshEntries } = useEntries();
@@ -30,17 +32,63 @@ export function SettingsScreen() {
     refreshFoodTypes();
     refreshReminders();
   }, [refreshEntries, refreshFoodTypes, refreshReminders]);
-  const { exportData, importData, exporting, importing, message, clearMessage } =
+  const { exportData, importData, exporting, importing, message, isSuccess, clearMessage } =
     useBackup(refreshAll);
   const styles = useDataStyles(colors);
 
   return (
     <ScrollView style={g.screenContainer} contentContainerStyle={g.screenContent}>
-      <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>Settings</Text>
+      <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>{t("settingsTitle")}</Text>
       <View style={[g.cardRow, { marginHorizontal: 16 }]}>
         <View style={g.rowText}>
-          <Text style={g.titleCard}>Dark theme</Text>
-          <Text style={g.subtitle}>Use dark appearance</Text>
+          <Text style={g.titleCard}>{t("settingsLanguage")}</Text>
+          <Text style={g.subtitle}>
+            {t("settingsEnglish")} / {t("settingsRussian")}
+          </Text>
+        </View>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <TouchableOpacity
+            onPress={() => setLocale("en")}
+            style={{
+              paddingVertical: 6,
+              paddingHorizontal: 12,
+              borderRadius: 8,
+              backgroundColor: locale === "en" ? colors.primary : colors.switchTrack,
+            }}
+          >
+            <Text
+              style={[
+                g.textBody,
+                { fontWeight: "600", color: locale === "en" ? "#fff" : colors.text },
+              ]}
+            >
+              {t("settingsEnglish")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setLocale("ru")}
+            style={{
+              paddingVertical: 6,
+              paddingHorizontal: 12,
+              borderRadius: 8,
+              backgroundColor: locale === "ru" ? colors.primary : colors.switchTrack,
+            }}
+          >
+            <Text
+              style={[
+                g.textBody,
+                { fontWeight: "600", color: locale === "ru" ? "#fff" : colors.text },
+              ]}
+            >
+              {t("settingsRussian")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+      <View style={[g.cardRow, { marginHorizontal: 16 }]}>
+        <View style={g.rowText}>
+          <Text style={g.titleCard}>{t("settingsDarkTheme")}</Text>
+          <Text style={g.subtitle}>{t("settingsDarkThemeSubtitle")}</Text>
         </View>
         <Switch
           value={isDark}
@@ -49,14 +97,14 @@ export function SettingsScreen() {
         />
       </View>
       <View style={styles.dataSection}>
-        <Text style={g.titleSection}>Data</Text>
-        <Text style={g.subtitle}>Download backup or load from file</Text>
+        <Text style={g.titleSection}>{t("settingsData")}</Text>
+        <Text style={g.subtitle}>{t("settingsDataSubtitle")}</Text>
         {message !== null && (
           <TouchableOpacity onPress={clearMessage} style={styles.messageRow}>
             <Text
               style={[
                 g.textBody,
-                message.startsWith("Data restored") ? styles.messageOk : styles.messageErr,
+                isSuccess ? styles.messageOk : styles.messageErr,
               ]}
             >
               {message}
@@ -71,7 +119,7 @@ export function SettingsScreen() {
           {exporting ? (
             <ActivityIndicator size="small" color={colors.primary} />
           ) : (
-            <Text style={g.primaryButtonOutlineText}>Download</Text>
+            <Text style={g.primaryButtonOutlineText}>{t("settingsDownload")}</Text>
           )}
         </TouchableOpacity>
         <TouchableOpacity
@@ -82,7 +130,7 @@ export function SettingsScreen() {
           {importing ? (
             <ActivityIndicator size="small" color={colors.primary} />
           ) : (
-            <Text style={g.primaryButtonOutlineText}>Load</Text>
+            <Text style={g.primaryButtonOutlineText}>{t("settingsLoad")}</Text>
           )}
         </TouchableOpacity>
       </View>

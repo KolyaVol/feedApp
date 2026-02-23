@@ -17,6 +17,7 @@ import { useReminders } from "../hooks/useReminders";
 import type { Reminder } from "../types";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
+import { useLocale } from "../contexts/LocaleContext";
 import { timeToDate, dateToTime } from "../utils/date";
 import {
   requestPermissions,
@@ -28,6 +29,7 @@ import {
 export function RemindersScreen() {
   const insets = useSafeAreaInsets();
   const g = useGlobalStyles();
+  const { t } = useLocale();
   const { colors } = useTheme();
   const {
     reminders,
@@ -88,17 +90,21 @@ export function RemindersScreen() {
   };
 
   const remove = (item: Reminder) => {
-    Alert.alert("Delete", `Remove "${item.title}"?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          if (item.notificationId) await cancelScheduledNotification(item.notificationId);
-          await deleteReminder(item.id);
+    Alert.alert(
+      t("remindersDeleteConfirmTitle"),
+      t("remindersDeleteConfirmMessage", { name: item.title }),
+      [
+        { text: t("remindersCancel"), style: "cancel" },
+        {
+          text: t("remindersDelete"),
+          style: "destructive",
+          onPress: async () => {
+            if (item.notificationId) await cancelScheduledNotification(item.notificationId);
+            await deleteReminder(item.id);
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const onToggleEnabled = async (item: Reminder, enabled: boolean) => {
@@ -114,9 +120,9 @@ export function RemindersScreen() {
 
   return (
     <View style={g.screenContainer}>
-      <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>Reminders</Text>
+      <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>{t("remindersScreenTitle")}</Text>
       <TouchableOpacity style={g.primaryButton} onPress={openAdd}>
-        <Text style={g.primaryButtonText}>+ Add reminder</Text>
+        <Text style={g.primaryButtonText}>{t("remindersAddReminder")}</Text>
       </TouchableOpacity>
       <FlatList
         data={reminders}
@@ -134,10 +140,10 @@ export function RemindersScreen() {
               trackColor={{ false: colors.switchTrack, true: colors.primary }}
             />
             <TouchableOpacity onPress={() => openEdit(item)} style={g.actionBtn}>
-              <Text style={g.linkText}>Edit</Text>
+              <Text style={g.linkText}>{t("remindersEdit")}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => remove(item)} style={g.actionBtn}>
-              <Text style={g.deleteText}>Delete</Text>
+              <Text style={g.deleteText}>{t("remindersDelete")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -145,16 +151,16 @@ export function RemindersScreen() {
       <Modal visible={modalVisible} animationType="slide" transparent>
         <View style={g.modalOverlay}>
           <View style={g.modal}>
-            <Text style={g.modalTitle}>{editing ? "Edit reminder" : "New reminder"}</Text>
+            <Text style={g.modalTitle}>{editing ? t("remindersEditReminder") : t("remindersNewReminder")}</Text>
             <TextInput
               style={[g.input, g.inputWithMargin]}
               value={title}
               onChangeText={setTitle}
-              placeholder="Title (e.g. Feed time)"
+              placeholder={t("remindersTitlePlaceholder")}
               placeholderTextColor={colors.placeholder}
             />
             <TouchableOpacity style={styles.timeRow} onPress={() => setShowTimePicker(true)}>
-              <Text style={[g.labelMuted, styles.timeLabel]}>Time</Text>
+              <Text style={[g.labelMuted, styles.timeLabel]}>{t("remindersTime")}</Text>
               <Text style={g.textBody}>{dateToTime(time)}</Text>
             </TouchableOpacity>
             {showTimePicker && (
@@ -170,10 +176,10 @@ export function RemindersScreen() {
             )}
             <View style={g.modalButtons}>
               <TouchableOpacity style={g.cancelBtn} onPress={() => setModalVisible(false)}>
-                <Text style={g.cancelBtnText}>Cancel</Text>
+                <Text style={g.cancelBtnText}>{t("remindersCancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={g.saveBtn} onPress={save}>
-                <Text style={g.saveBtnText}>Save</Text>
+                <Text style={g.saveBtnText}>{t("remindersSave")}</Text>
               </TouchableOpacity>
             </View>
           </View>

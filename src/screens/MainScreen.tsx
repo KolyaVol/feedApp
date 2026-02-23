@@ -22,6 +22,7 @@ import { pastelColorForWeeklyMin, spacing } from "../theme";
 import { formatDate } from "../utils/date";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
+import { useLocale } from "../contexts/LocaleContext";
 
 const PRIORITY_ORDER: Record<FoodPriority, number> = { high: 3, middle: 2, low: 1 };
 function priorityRank(p?: FoodPriority): number {
@@ -31,6 +32,7 @@ function priorityRank(p?: FoodPriority): number {
 export function MainScreen({ onAddVariant }: { onAddVariant: () => void }) {
   const insets = useSafeAreaInsets();
   const g = useGlobalStyles();
+  const { t } = useLocale();
   const { colors } = useTheme();
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [showPicker, setShowPicker] = useState(false);
@@ -102,10 +104,10 @@ export function MainScreen({ onAddVariant }: { onAddVariant: () => void }) {
 
   return (
     <ScrollView style={g.screenContainer} contentContainerStyle={g.screenContent}>
-      <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>Baby Feed</Text>
+      <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>{t("mainScreenTitle")}</Text>
       <TouchableOpacity style={styles.dateRow} onPress={() => setShowPicker(true)}>
         <Text style={g.titleSection}>{formatDate(selectedDate)}</Text>
-        <Text style={g.linkText}>Change date</Text>
+        <Text style={g.linkText}>{t("mainChangeDate")}</Text>
       </TouchableOpacity>
       {showPicker && (
         <DateTimePicker
@@ -118,21 +120,25 @@ export function MainScreen({ onAddVariant }: { onAddVariant: () => void }) {
       )}
       {Platform.OS === "ios" && showPicker && (
         <TouchableOpacity onPress={() => setShowPicker(false)}>
-          <Text style={[g.linkText, g.textBody, styles.doneDate]}>Done</Text>
+          <Text style={[g.linkText, g.textBody, styles.doneDate]}>{t("mainDone")}</Text>
         </TouchableOpacity>
       )}
       <View style={styles.chartWrap}>
         <DonutChart data={aggregated} centerLabel={centerLabel} />
       </View>
       <Text style={[g.labelMuted, styles.summary]}>
-        {entriesForDate.length} entries · {totalAmount} {totalUnit} total
+        {t("mainEntriesTotal", {
+          count: entriesForDate.length,
+          amount: totalAmount,
+          unit: totalUnit,
+        })}
       </Text>
       <View style={styles.searchWrap}>
         <TextInput
           style={[g.input, styles.searchInput]}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search dishes..."
+          placeholder={t("mainSearchDishes")}
           placeholderTextColor={colors.placeholder}
           autoCapitalize="none"
           autoCorrect={false}
@@ -144,7 +150,7 @@ export function MainScreen({ onAddVariant }: { onAddVariant: () => void }) {
         chipBackgroundByFoodTypeId={chipBackgroundByFoodTypeId}
       />
       <TouchableOpacity style={g.primaryButtonOutline} onPress={onAddVariant}>
-        <Text style={g.primaryButtonOutlineText}>+ Add new variant</Text>
+        <Text style={g.primaryButtonOutlineText}>{t("mainAddNewVariant")}</Text>
       </TouchableOpacity>
     </ScrollView>
   );

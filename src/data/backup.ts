@@ -63,24 +63,25 @@ export function exportToJson(payload: BackupPayload): string {
   return JSON.stringify(payload, null, 2);
 }
 
-export type ImportResult = { ok: true } | { ok: false; error: string };
+export type BackupErrorKey = "backupInvalidJson" | "backupInvalidBackupFormat" | "backupNoData";
+export type ImportResult = { ok: true } | { ok: false; error: BackupErrorKey };
 
 export async function importFromJson(json: string): Promise<ImportResult> {
   let data: unknown;
   try {
     data = JSON.parse(json);
   } catch {
-    return { ok: false, error: "Invalid JSON" };
+    return { ok: false, error: "backupInvalidJson" };
   }
   if (typeof data !== "object" || data === null || !("version" in data)) {
-    return { ok: false, error: "Invalid backup format" };
+    return { ok: false, error: "backupInvalidBackupFormat" };
   }
   const raw = data as Record<string, unknown>;
   const foodTypes = Array.isArray(raw.foodTypes) ? raw.foodTypes.filter(isFoodType) : [];
   const entries = Array.isArray(raw.entries) ? raw.entries.filter(isFeedEntry) : [];
   const reminders = Array.isArray(raw.reminders) ? raw.reminders.filter(isReminder) : [];
   if (foodTypes.length === 0 && entries.length === 0 && reminders.length === 0) {
-    return { ok: false, error: "Backup contains no valid data" };
+    return { ok: false, error: "backupNoData" };
   }
   await Promise.all([setFoodTypes(foodTypes), setEntries(entries), setReminders(reminders)]);
   return { ok: true };

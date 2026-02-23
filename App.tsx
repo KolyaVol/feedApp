@@ -18,23 +18,25 @@ import { FoodTypesScreen } from "./src/screens/FoodTypesScreen";
 import { RemindersScreen } from "./src/screens/RemindersScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ThemeProvider, useTheme } from "./src/contexts/ThemeContext";
+import { LocaleProvider, useLocale } from "./src/contexts/LocaleContext";
 import { fonts } from "./src/theme";
 import type { RootTabParamList } from "./src/navigation/types";
+import type { TranslationKey } from "./src/i18n/en";
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const Stack = createNativeStackNavigator();
 
 const TAB_CONFIG: {
   name: keyof RootTabParamList;
-  label: string;
-  title: string;
+  labelKey: TranslationKey;
+  titleKey: TranslationKey;
   component: React.ComponentType<any>;
 }[] = [
-  { name: "Home", label: "Home", title: "Baby Feed", component: () => null },
-  { name: "Stats", label: "Stats", title: "Statistics", component: StatisticsScreen },
-  { name: "FoodTypes", label: "Types", title: "Food types", component: FoodTypesScreen },
-  { name: "Reminders", label: "Reminders", title: "Reminders", component: RemindersScreen },
-  { name: "Settings", label: "Settings", title: "Settings", component: SettingsScreen },
+  { name: "Home", labelKey: "tabsHome", titleKey: "screenTitlesBabyFeed", component: () => null },
+  { name: "Stats", labelKey: "tabsStats", titleKey: "screenTitlesStatistics", component: StatisticsScreen },
+  { name: "FoodTypes", labelKey: "tabsTypes", titleKey: "screenTitlesFoodTypes", component: FoodTypesScreen },
+  { name: "Reminders", labelKey: "tabsReminders", titleKey: "tabsReminders", component: RemindersScreen },
+  { name: "Settings", labelKey: "tabsSettings", titleKey: "settingsTitle", component: SettingsScreen },
 ];
 
 function HomeStack() {
@@ -76,6 +78,7 @@ function TabIcon({
 
 function AppTabs() {
   const { colors, theme } = useTheme();
+  const { t } = useLocale();
   return (
     <>
       <Tab.Navigator
@@ -96,21 +99,23 @@ function AppTabs() {
           name="Home"
           component={HomeStack}
           options={{
-            title: "Baby Feed",
-            tabBarLabel: "Home",
-            tabBarIcon: ({ focused }) => <TabIcon label="Home" focused={focused} colors={colors} />,
+            title: t("screenTitlesBabyFeed"),
+            tabBarLabel: t("tabsHome"),
+            tabBarIcon: ({ focused }) => (
+              <TabIcon label={t("tabsHome")} focused={focused} colors={colors} />
+            ),
           }}
         />
-        {TAB_CONFIG.slice(1).map(({ name, label, title, component }) => (
+        {TAB_CONFIG.slice(1).map(({ name, labelKey, titleKey, component }) => (
           <Tab.Screen
             key={name}
             name={name}
             component={component}
             options={{
-              title,
-              tabBarLabel: label,
+              title: t(titleKey),
+              tabBarLabel: t(labelKey),
               tabBarIcon: ({ focused }) => (
-                <TabIcon label={label} focused={focused} colors={colors} />
+                <TabIcon label={t(labelKey)} focused={focused} colors={colors} />
               ),
             }}
           />
@@ -133,11 +138,13 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <NavigationContainer>
-          <AppTabs />
-        </NavigationContainer>
-      </ThemeProvider>
+      <LocaleProvider>
+        <ThemeProvider>
+          <NavigationContainer>
+            <AppTabs />
+          </NavigationContainer>
+        </ThemeProvider>
+      </LocaleProvider>
     </SafeAreaProvider>
   );
 }

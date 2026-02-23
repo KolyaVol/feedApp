@@ -8,17 +8,20 @@ import { DonutChart } from "../components/DonutChart";
 import type { StatsPeriod } from "../types";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
+import { useLocale } from "../contexts/LocaleContext";
 import { spacing } from "../theme";
+import type { TranslationKey } from "../i18n/en";
 
-const PERIODS: { key: StatsPeriod; label: string }[] = [
-  { key: "daily", label: "Daily" },
-  { key: "weekly", label: "Weekly" },
-  { key: "monthly", label: "Monthly" },
+const PERIOD_KEYS: { key: StatsPeriod; labelKey: TranslationKey }[] = [
+  { key: "daily", labelKey: "statsDaily" },
+  { key: "weekly", labelKey: "statsWeekly" },
+  { key: "monthly", labelKey: "statsMonthly" },
 ];
 
 export function StatisticsScreen() {
   const insets = useSafeAreaInsets();
   const g = useGlobalStyles();
+  const { t } = useLocale();
   const { colors } = useTheme();
   const [period, setPeriod] = useState<StatsPeriod>("daily");
   const [selectedDate] = useState(() => new Date());
@@ -32,15 +35,15 @@ export function StatisticsScreen() {
 
   return (
     <ScrollView style={g.screenContainer} contentContainerStyle={g.screenContent}>
-      <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>Statistics</Text>
+      <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>{t("statsScreenTitle")}</Text>
       <View style={styles.periodRow}>
-        {PERIODS.map(({ key, label }) => (
+        {PERIOD_KEYS.map(({ key, labelKey }) => (
           <TouchableOpacity
             key={key}
             style={[styles.periodTab, period === key && styles.periodTabActive]}
             onPress={() => setPeriod(key)}
           >
-            <Text style={[g.labelMuted, period === key && g.tabActiveText]}>{label}</Text>
+            <Text style={[g.labelMuted, period === key && g.tabActiveText]}>{t(labelKey)}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -50,7 +53,7 @@ export function StatisticsScreen() {
       />
       <View style={g.listCard}>
         {aggregated.length === 0 ? (
-          <Text style={[g.emptyText, g.emptyTextCenter]}>No data for this period</Text>
+          <Text style={[g.emptyText, g.emptyTextCenter]}>{t("statsNoDataForPeriod")}</Text>
         ) : (
           aggregated.map((item) => (
             <View key={item.foodTypeId} style={g.listRow}>
