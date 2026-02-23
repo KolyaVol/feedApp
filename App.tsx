@@ -5,7 +5,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { Text, View, StyleSheet } from "react-native";
+import { Text, View } from "react-native";
 import {
   Nunito_400Regular,
   Nunito_500Medium,
@@ -16,27 +16,108 @@ import { MainScreen } from "./src/screens/MainScreen";
 import { StatisticsScreen } from "./src/screens/StatisticsScreen";
 import { FoodTypesScreen } from "./src/screens/FoodTypesScreen";
 import { RemindersScreen } from "./src/screens/RemindersScreen";
+import { SettingsScreen } from "./src/screens/SettingsScreen";
+import { ThemeProvider, useTheme } from "./src/contexts/ThemeContext";
+import { fonts } from "./src/theme";
+import type { RootTabParamList } from "./src/navigation/types";
 
-const Tab = createBottomTabNavigator();
+const Tab = createBottomTabNavigator<RootTabParamList>();
 const Stack = createNativeStackNavigator();
+
+const TAB_CONFIG: {
+  name: keyof RootTabParamList;
+  label: string;
+  title: string;
+  component: React.ComponentType<any>;
+}[] = [
+  { name: "Home", label: "Home", title: "Baby Feed", component: () => null },
+  { name: "Stats", label: "Stats", title: "Statistics", component: StatisticsScreen },
+  { name: "FoodTypes", label: "Types", title: "Food types", component: FoodTypesScreen },
+  { name: "Reminders", label: "Reminders", title: "Reminders", component: RemindersScreen },
+  { name: "Settings", label: "Settings", title: "Settings", component: SettingsScreen },
+];
 
 function HomeStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Main">
         {({ navigation }) => (
-          <MainScreen onAddVariant={() => navigation.getParent()?.navigate("FoodTypes" as never)} />
+          <MainScreen onAddVariant={() => navigation.getParent()?.navigate("FoodTypes")} />
         )}
       </Stack.Screen>
     </Stack.Navigator>
   );
 }
 
-function TabIcon({ label, focused }: { label: string; focused: boolean }) {
+function TabIcon({
+  label,
+  focused,
+  colors,
+}: {
+  label: string;
+  focused: boolean;
+  colors: { primary: string; textEmpty: string };
+}) {
   return (
-    <View style={styles.tabIcon}>
-      <Text style={[styles.tabIconText, focused && styles.tabIconTextActive]}>{label[0]}</Text>
+    <View style={{ alignItems: "center", justifyContent: "center" }}>
+      <Text
+        style={{
+          fontSize: 16,
+          color: focused ? colors.primary : colors.textEmpty,
+          fontWeight: "600",
+          fontFamily: fonts.semiBold,
+        }}
+      >
+        {label[0]}
+      </Text>
     </View>
+  );
+}
+
+function AppTabs() {
+  const { colors, theme } = useTheme();
+  return (
+    <>
+      <Tab.Navigator
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: colors.textEmpty,
+          tabBarStyle: {
+            backgroundColor: colors.card,
+            height: 80,
+            paddingBottom: 10,
+            paddingTop: 8,
+          },
+          tabBarLabelStyle: { fontSize: 12, marginTop: 4, paddingBottom: 4 },
+        }}
+      >
+        <Tab.Screen
+          name="Home"
+          component={HomeStack}
+          options={{
+            title: "Baby Feed",
+            tabBarLabel: "Home",
+            tabBarIcon: ({ focused }) => <TabIcon label="Home" focused={focused} colors={colors} />,
+          }}
+        />
+        {TAB_CONFIG.slice(1).map(({ name, label, title, component }) => (
+          <Tab.Screen
+            key={name}
+            name={name}
+            component={component}
+            options={{
+              title,
+              tabBarLabel: label,
+              tabBarIcon: ({ focused }) => (
+                <TabIcon label={label} focused={focused} colors={colors} />
+              ),
+            }}
+          />
+        ))}
+      </Tab.Navigator>
+      <StatusBar style={theme === "dark" ? "light" : "dark"} />
+    </>
   );
 }
 
@@ -52,71 +133,11 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
-        <Tab.Navigator
-          screenOptions={{
-            headerShown: false,
-            tabBarActiveTintColor: "#4a9eff",
-            tabBarInactiveTintColor: "#888",
-            tabBarStyle: { backgroundColor: "#fff", height: 80, paddingBottom: 10, paddingTop: 8 },
-            tabBarLabelStyle: { fontSize: 12, marginTop: 4, paddingBottom: 4 },
-          }}
-        >
-          <Tab.Screen
-            name="Home"
-            component={HomeStack}
-            options={{
-              title: "Baby Feed",
-              tabBarLabel: "Home",
-              tabBarIcon: ({ focused }) => <TabIcon label="Home" focused={focused} />,
-            }}
-          />
-          <Tab.Screen
-            name="Stats"
-            component={StatisticsScreen}
-            options={{
-              title: "Statistics",
-              tabBarLabel: "Stats",
-              tabBarIcon: ({ focused }) => <TabIcon label="Stats" focused={focused} />,
-            }}
-          />
-          <Tab.Screen
-            name="FoodTypes"
-            component={FoodTypesScreen}
-            options={{
-              title: "Food types",
-              tabBarLabel: "Types",
-              tabBarIcon: ({ focused }) => <TabIcon label="Types" focused={focused} />,
-            }}
-          />
-          <Tab.Screen
-            name="Reminders"
-            component={RemindersScreen}
-            options={{
-              title: "Reminders",
-              tabBarLabel: "Reminders",
-              tabBarIcon: ({ focused }) => <TabIcon label="Reminders" focused={focused} />,
-            }}
-          />
-        </Tab.Navigator>
-      </NavigationContainer>
-      <StatusBar style="dark" />
+      <ThemeProvider>
+        <NavigationContainer>
+          <AppTabs />
+        </NavigationContainer>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  tabIcon: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tabIconText: {
-    fontSize: 16,
-    color: "#888",
-    fontWeight: "600",
-    fontFamily: "Nunito_600SemiBold",
-  },
-  tabIconTextActive: {
-    color: "#4a9eff",
-  },
-});

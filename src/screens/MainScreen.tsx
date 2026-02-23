@@ -18,39 +18,20 @@ import { getEntriesInRange, getStartOfWeek, getEndOfWeek } from "../data/entries
 import { DonutChart } from "../components/DonutChart";
 import { QuickAddForm } from "../components/QuickAddForm";
 import type { FoodPriority } from "../types";
-import { g } from "../globalStyles";
+import { pastelColorForWeeklyMin, spacing } from "../theme";
+import { formatDate } from "../utils/date";
+import { useGlobalStyles } from "../globalStyles";
+import { useTheme } from "../contexts/ThemeContext";
 
 const PRIORITY_ORDER: Record<FoodPriority, number> = { high: 3, middle: 2, low: 1 };
 function priorityRank(p?: FoodPriority): number {
   return p ? PRIORITY_ORDER[p] : 0;
 }
 
-const PASTEL_GREEN = "#c8e6c9";
-const PASTEL_YELLOW = "#fff9c4";
-const PASTEL_ORANGE = "#ffe0b2";
-const PASTEL_RED = "#ffcdd2";
-
-function pastelColorForWeeklyMin(ratio: number): string {
-  if (ratio >= 1) return PASTEL_GREEN;
-  if (ratio >= 0.5) return PASTEL_YELLOW;
-  if (ratio >= 0.25) return PASTEL_ORANGE;
-  return PASTEL_RED;
-}
-
-function formatDate(d: Date): string {
-  const today = new Date();
-  if (
-    d.getDate() === today.getDate() &&
-    d.getMonth() === today.getMonth() &&
-    d.getFullYear() === today.getFullYear()
-  ) {
-    return "Today";
-  }
-  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-}
-
 export function MainScreen({ onAddVariant }: { onAddVariant: () => void }) {
   const insets = useSafeAreaInsets();
+  const g = useGlobalStyles();
+  const { colors } = useTheme();
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [showPicker, setShowPicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -152,7 +133,7 @@ export function MainScreen({ onAddVariant }: { onAddVariant: () => void }) {
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholder="Search dishes..."
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.placeholder}
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -174,7 +155,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.screenPadding,
     paddingTop: 8,
     paddingBottom: 4,
   },
@@ -186,7 +167,7 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   searchWrap: {
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.screenPadding,
     marginBottom: 4,
   },
   searchInput: {

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo } from "react";
 import type { FeedEntry } from "../types";
 import * as entriesData from "../data/entries";
+import { useAsyncList } from "./useAsyncList";
 
 export function useEntries(selectedDate?: Date): {
   entries: FeedEntry[];
@@ -11,39 +12,32 @@ export function useEntries(selectedDate?: Date): {
   entriesForDate: FeedEntry[];
 } {
   const date = selectedDate ?? new Date();
-  const [entries, setEntries] = useState<FeedEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    const list = await entriesData.getEntries();
-    setEntries(list);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  const { items: entries, loading, refresh, add, remove } = useAsyncList<FeedEntry>({
+    fetch: entriesData.getEntries,
+    add: entriesData.addEntry,
+    remove: entriesData.deleteEntry,
+  });
 
   const start = entriesData.getStartOfDay(date);
   const end = entriesData.getEndOfDay(date);
-  const entriesForDate = entriesData.getEntriesInRange(entries, start, end);
+  const entriesForDate = useMemo(
+    () => entriesData.getEntriesInRange(entries, start, end),
+    [entries, start, end],
+  );
 
   const addEntry = useCallback(
     async (entry: Omit<FeedEntry, "id">) => {
-      const added = await entriesData.addEntry(entry);
-      await refresh();
+      const added = await add!(entry);
       return added;
     },
-    [refresh],
+    [add],
   );
 
   const deleteEntry = useCallback(
     async (id: string) => {
-      await entriesData.deleteEntry(id);
-      await refresh();
+      await remove!(id);
     },
-    [refresh],
+    [remove],
   );
 
   return {

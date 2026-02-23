@@ -9,7 +9,18 @@ import {
   Alert,
 } from "react-native";
 import type { FoodType } from "../types";
-import { g } from "../globalStyles";
+import { useGlobalStyles } from "../globalStyles";
+import { useTheme } from "../contexts/ThemeContext";
+
+function isLightBg(hex: string): boolean {
+  const m = hex.replace(/^#/, "").match(/.{2}/g);
+  if (!m) return false;
+  const r = parseInt(m[0], 16) / 255;
+  const g = parseInt(m[1], 16) / 255;
+  const b = parseInt(m[2], 16) / 255;
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+  return luminance > 0.55;
+}
 
 interface QuickAddFormProps {
   foodTypes: FoodType[];
@@ -18,6 +29,8 @@ interface QuickAddFormProps {
 }
 
 export function QuickAddForm({ foodTypes, onAdd, chipBackgroundByFoodTypeId }: QuickAddFormProps) {
+  const g = useGlobalStyles();
+  const { colors } = useTheme();
   const [selectedId, setSelectedId] = useState<string>(foodTypes[0]?.id ?? "");
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
@@ -64,6 +77,7 @@ export function QuickAddForm({ foodTypes, onAdd, chipBackgroundByFoodTypeId }: Q
           {foodTypes.map((f) => {
             const bgColor = chipBackgroundByFoodTypeId?.[f.id];
             const isSelected = selectedId === f.id;
+            const useDarkChipText = bgColor != null && isLightBg(bgColor);
             return (
               <TouchableOpacity
                 key={f.id}
@@ -75,7 +89,7 @@ export function QuickAddForm({ foodTypes, onAdd, chipBackgroundByFoodTypeId }: Q
                 onPress={() => setSelectedId(f.id)}
               >
                 <View style={[g.chipDot, { backgroundColor: f.color }]} />
-                <Text style={g.chipText}>{f.name}</Text>
+                <Text style={[g.chipText, useDarkChipText && { color: "#333" }]}>{f.name}</Text>
               </TouchableOpacity>
             );
           })}
@@ -87,7 +101,7 @@ export function QuickAddForm({ foodTypes, onAdd, chipBackgroundByFoodTypeId }: Q
           value={amount}
           onChangeText={setAmount}
           placeholder={`Amount (${unit})`}
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.placeholder}
           keyboardType="numeric"
         />
         <Text style={[g.labelMuted, g.unitLabel]}>{unit}</Text>

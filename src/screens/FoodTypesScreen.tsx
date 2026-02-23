@@ -13,18 +13,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFoodTypes } from "../hooks/useFoodTypes";
 import type { FoodType, FoodPriority } from "../types";
-import { g } from "../globalStyles";
-
-const PRESET_COLORS = [
-  "#FFB6C1",
-  "#87CEEB",
-  "#98FB98",
-  "#ADD8E6",
-  "#DDA0DD",
-  "#F0E68C",
-  "#FFA07A",
-  "#E6E6FA",
-];
+import { useGlobalStyles } from "../globalStyles";
+import { useTheme } from "../contexts/ThemeContext";
+import { foodTypePresetColors, spacing } from "../theme";
 
 const PRIORITY_OPTIONS: { value: FoodPriority | ""; label: string }[] = [
   { value: "", label: "No priority" },
@@ -35,12 +26,15 @@ const PRIORITY_OPTIONS: { value: FoodPriority | ""; label: string }[] = [
 
 export function FoodTypesScreen() {
   const insets = useSafeAreaInsets();
+  const g = useGlobalStyles();
+  const { colors } = useTheme();
+  const styles = useFoodTypesScreenStyles(colors);
   const { foodTypes, addFoodType, updateFoodType, deleteFoodType } = useFoodTypes();
   const [modalVisible, setModalVisible] = useState(false);
   const [editing, setEditing] = useState<FoodType | null>(null);
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("ml");
-  const [color, setColor] = useState(PRESET_COLORS[0]);
+  const [color, setColor] = useState<string>(foodTypePresetColors[0]);
   const [priority, setPriority] = useState<FoodPriority | "">("");
   const [weeklyMinimumAmount, setWeeklyMinimumAmount] = useState("");
 
@@ -48,7 +42,7 @@ export function FoodTypesScreen() {
     setEditing(null);
     setName("");
     setUnit("ml");
-    setColor(PRESET_COLORS[0]);
+    setColor(foodTypePresetColors[0]);
     setPriority("");
     setWeeklyMinimumAmount("");
     setModalVisible(true);
@@ -134,7 +128,7 @@ export function FoodTypesScreen() {
               value={name}
               onChangeText={setName}
               placeholder="Name (e.g. Breast, Formula)"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.placeholder}
               autoCapitalize="words"
             />
             <TextInput
@@ -142,7 +136,7 @@ export function FoodTypesScreen() {
               value={unit}
               onChangeText={setUnit}
               placeholder="Unit (ml, g, portion)"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.placeholder}
             />
             <Text style={[g.labelMuted, styles.optionalLabel]}>Priority (optional)</Text>
             <View style={styles.priorityRow}>
@@ -171,22 +165,40 @@ export function FoodTypesScreen() {
               value={weeklyMinimumAmount}
               onChangeText={setWeeklyMinimumAmount}
               placeholder="e.g. 500"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.placeholder}
               keyboardType="numeric"
             />
             <Text style={[g.labelMuted, styles.colorLabel]}>Color</Text>
-            <ScrollView horizontal style={styles.colorRow}>
-              {PRESET_COLORS.map((c) => (
-                <TouchableOpacity
-                  key={c}
-                  style={[
-                    styles.colorOption,
-                    { backgroundColor: c },
-                    color === c && styles.colorOptionSelected,
-                  ]}
-                  onPress={() => setColor(c)}
-                />
-              ))}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.colorScroll}
+              contentContainerStyle={styles.colorScrollContent}
+            >
+              <View style={styles.colorRows}>
+                {[0, 1].map((rowIndex) => {
+                  const half = Math.ceil(foodTypePresetColors.length / 2);
+                  const rowColors =
+                    rowIndex === 0
+                      ? foodTypePresetColors.slice(0, half)
+                      : foodTypePresetColors.slice(half);
+                  return (
+                    <View key={rowIndex} style={styles.colorRow}>
+                      {rowColors.map((c) => (
+                        <TouchableOpacity
+                          key={c}
+                          style={[
+                            styles.colorOption,
+                            { backgroundColor: c },
+                            color === c && styles.colorOptionSelected,
+                          ]}
+                          onPress={() => setColor(c)}
+                        />
+                      ))}
+                    </View>
+                  );
+                })}
+              </View>
             </ScrollView>
             <View style={g.modalButtons}>
               <TouchableOpacity style={g.cancelBtn} onPress={() => setModalVisible(false)}>
@@ -203,22 +215,39 @@ export function FoodTypesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  optionalLabel: { marginBottom: 8 },
-  colorLabel: { marginBottom: 8 },
-  colorRow: { flexDirection: "row", marginBottom: 20 },
-  colorOption: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
-  colorOptionSelected: { borderWidth: 3, borderColor: "#333" },
-  priorityRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
-  priorityChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: "#f0f0f0",
-  },
-  priorityChipSelected: {
-    backgroundColor: "#4a9eff",
-  },
-  priorityChipText: { fontSize: 14, color: "#333" },
-  priorityChipTextSelected: { color: "#fff", fontWeight: "600" },
-});
+function useFoodTypesScreenStyles(colors: {
+  text: string;
+  chipBg: string;
+  primary: string;
+  card: string;
+}) {
+  return React.useMemo(
+    () =>
+      StyleSheet.create({
+        optionalLabel: { marginBottom: 8 },
+        colorLabel: { marginBottom: 8 },
+        colorScroll: { marginBottom: 20 },
+        colorScrollContent: { paddingRight: 8 },
+        colorRows: { flexDirection: "column" },
+        colorRow: { flexDirection: "row", marginBottom: 8 },
+        colorOption: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
+        colorOptionSelected: { borderWidth: 3, borderColor: colors.text },
+        priorityRow: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: spacing.radiusMd,
+          marginBottom: 16,
+        },
+        priorityChip: {
+          paddingVertical: 8,
+          paddingHorizontal: 12,
+          borderRadius: spacing.radiusMd,
+          backgroundColor: colors.chipBg,
+        },
+        priorityChipSelected: { backgroundColor: colors.primary },
+        priorityChipText: { fontSize: 14, color: colors.text },
+        priorityChipTextSelected: { color: colors.card, fontWeight: "600" },
+      }),
+    [colors],
+  );
+}

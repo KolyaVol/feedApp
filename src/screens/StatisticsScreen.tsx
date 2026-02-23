@@ -6,7 +6,9 @@ import { useEntries } from "../hooks/useEntries";
 import { useStats } from "../hooks/useStats";
 import { DonutChart } from "../components/DonutChart";
 import type { StatsPeriod } from "../types";
-import { g } from "../globalStyles";
+import { useGlobalStyles } from "../globalStyles";
+import { useTheme } from "../contexts/ThemeContext";
+import { spacing } from "../theme";
 
 const PERIODS: { key: StatsPeriod; label: string }[] = [
   { key: "daily", label: "Daily" },
@@ -16,11 +18,14 @@ const PERIODS: { key: StatsPeriod; label: string }[] = [
 
 export function StatisticsScreen() {
   const insets = useSafeAreaInsets();
+  const g = useGlobalStyles();
+  const { colors } = useTheme();
   const [period, setPeriod] = useState<StatsPeriod>("daily");
   const [selectedDate] = useState(() => new Date());
   const { foodTypes } = useFoodTypes();
   const { entries } = useEntries();
   const aggregated = useStats(entries, foodTypes, period, selectedDate);
+  const styles = usePeriodStyles(colors);
 
   const total = useMemo(() => aggregated.reduce((s, a) => s + a.amount, 0), [aggregated]);
   const totalUnit = aggregated[0]?.unit ?? "";
@@ -62,19 +67,26 @@ export function StatisticsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  periodRow: {
-    flexDirection: "row",
-    marginHorizontal: 16,
-    marginBottom: 16,
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    overflow: "hidden",
-  },
-  periodTab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  periodTabActive: { backgroundColor: "#4a9eff" },
-});
+function usePeriodStyles(colors: {
+  card: string;
+  primary: string;
+  borderLight: string;
+  danger: string;
+}) {
+  return React.useMemo(
+    () =>
+      StyleSheet.create({
+        periodRow: {
+          flexDirection: "row",
+          marginHorizontal: spacing.screenPadding,
+          marginBottom: spacing.screenPadding,
+          backgroundColor: colors.card,
+          borderRadius: spacing.radiusMd,
+          overflow: "hidden",
+        },
+        periodTab: { flex: 1, paddingVertical: 12, alignItems: "center" },
+        periodTabActive: { backgroundColor: colors.primary },
+      }),
+    [colors],
+  );
+}

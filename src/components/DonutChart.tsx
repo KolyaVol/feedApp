@@ -2,13 +2,18 @@ import React from "react";
 import { View, Text, StyleSheet, useWindowDimensions } from "react-native";
 import { PieChart } from "react-native-chart-kit";
 import type { AggregatedFood } from "../types";
-import { g } from "../globalStyles";
-import { colors, fonts } from "../theme";
+import { useGlobalStyles } from "../globalStyles";
+import { useTheme } from "../contexts/ThemeContext";
+import { fonts } from "../theme";
 
-const chartConfig = {
-  color: () => "#666",
-  labelColor: () => "#666",
-};
+function isLightBg(hex: string): boolean {
+  const m = hex.replace(/^#/, "").match(/.{2}/g);
+  if (!m) return false;
+  const r = parseInt(m[0], 16) / 255;
+  const g = parseInt(m[1], 16) / 255;
+  const b = parseInt(m[2], 16) / 255;
+  return 0.299 * r + 0.587 * g + 0.114 * b > 0.55;
+}
 
 interface DonutChartProps {
   data: AggregatedFood[];
@@ -17,7 +22,53 @@ interface DonutChartProps {
 
 export function DonutChart({ data, centerLabel }: DonutChartProps) {
   const { width } = useWindowDimensions();
+  const g = useGlobalStyles();
+  const { colors } = useTheme();
   const size = Math.min(width - 48, 280);
+
+  const chartConfig = React.useMemo(
+    () => ({
+      color: () => colors.textMuted,
+      labelColor: () => colors.textMuted,
+    }),
+    [colors],
+  );
+
+  const styles = React.useMemo(
+    () =>
+      StyleSheet.create({
+        wrap: { alignItems: "center", justifyContent: "center" },
+        chartBox: { alignItems: "center", justifyContent: "center" },
+        centerLabel: { alignItems: "center", justifyContent: "center" },
+        empty: {
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: colors.emptyChart,
+          borderRadius: 140,
+        },
+        legendRow: {
+          flexDirection: "row",
+          justifyContent: "center",
+          alignItems: "center",
+          flexWrap: "wrap",
+          marginTop: 12,
+          marginHorizontal: 16,
+        },
+        legendItem: {
+          flexDirection: "row",
+          alignItems: "center",
+          marginRight: 16,
+          marginBottom: 4,
+        },
+        legendDot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
+        legendText: {
+          fontSize: 14,
+          color: colors.text,
+          fontFamily: fonts.medium,
+        },
+      }),
+    [colors],
+  );
 
   if (!data.length) {
     return (
@@ -28,9 +79,11 @@ export function DonutChart({ data, centerLabel }: DonutChartProps) {
   }
 
   const chartData = data.map((d) => ({ name: d.name, amount: d.amount, color: d.color }));
-  const total = data.reduce((s, d) => s + d.amount, 0);
-
   const paddingLeft = Math.round(size / 4);
+  const dominantColor = data.length
+    ? data.reduce((a, b) => (a.amount >= b.amount ? a : b)).color
+    : null;
+  const useDarkCenterText = dominantColor != null && isLightBg(dominantColor);
 
   return (
     <View style={styles.wrap}>
@@ -48,7 +101,7 @@ export function DonutChart({ data, centerLabel }: DonutChartProps) {
         />
         {centerLabel != null && (
           <View style={[StyleSheet.absoluteFill, styles.centerLabel]}>
-            <Text style={g.chartCenterText}>{centerLabel}</Text>
+            <Text style={[g.chartCenterText, useDarkCenterText && { color: "#333" }]}>{centerLabel}</Text>
           </View>
         )}
       </View>
@@ -65,49 +118,3 @@ export function DonutChart({ data, centerLabel }: DonutChartProps) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  chartBox: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  centerLabel: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  empty: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.emptyChart,
-    borderRadius: 140,
-  },
-  legendRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    flexWrap: "wrap",
-    marginTop: 12,
-    marginHorizontal: 16,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 16,
-    marginBottom: 4,
-  },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 6,
-  },
-  legendText: {
-    fontSize: 14,
-    color: colors.text,
-    fontFamily: fonts.medium,
-  },
-});

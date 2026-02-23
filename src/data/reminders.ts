@@ -1,38 +1,20 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Reminder } from "../types";
 import { KEYS } from "./storageKeys";
+import { createStorageList } from "./storage";
 
-export async function getReminders(): Promise<Reminder[]> {
-  const raw = await AsyncStorage.getItem(KEYS.REMINDERS);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
+export const remindersStorage = createStorageList<Reminder>(KEYS.REMINDERS);
 
-export async function setReminders(reminders: Reminder[]): Promise<void> {
-  await AsyncStorage.setItem(KEYS.REMINDERS, JSON.stringify(reminders));
-}
+export const getReminders = remindersStorage.getList;
+export const setReminders = remindersStorage.setList;
 
 export async function addReminder(reminder: Omit<Reminder, "id">): Promise<Reminder> {
-  const list = await getReminders();
-  const newItem: Reminder = { ...reminder, id: String(Date.now()) };
-  list.push(newItem);
-  await setReminders(list);
-  return newItem;
+  return remindersStorage.addItem(reminder);
 }
 
 export async function updateReminder(id: string, updates: Partial<Reminder>): Promise<void> {
-  const list = await getReminders();
-  const i = list.findIndex((r) => r.id === id);
-  if (i === -1) return;
-  list[i] = { ...list[i], ...updates };
-  await setReminders(list);
+  return remindersStorage.updateItem(id, updates);
 }
 
 export async function deleteReminder(id: string): Promise<void> {
-  const list = await getReminders().then((arr) => arr.filter((r) => r.id !== id));
-  await setReminders(list);
+  return remindersStorage.deleteItem(id);
 }

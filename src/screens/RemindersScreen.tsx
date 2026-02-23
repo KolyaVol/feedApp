@@ -15,28 +15,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useReminders } from "../hooks/useReminders";
 import type { Reminder } from "../types";
-import { g } from "../globalStyles";
+import { useGlobalStyles } from "../globalStyles";
+import { useTheme } from "../contexts/ThemeContext";
+import { timeToDate, dateToTime } from "../utils/date";
 import {
   requestPermissions,
   scheduleReminder,
   cancelScheduledNotification,
   rescheduleAllReminders,
 } from "../notifications/schedule";
-import { updateReminder } from "../data/reminders";
-
-function timeToDate(time: string): Date {
-  const [h, m] = time.split(":").map(Number);
-  const d = new Date();
-  d.setHours(h ?? 0, m ?? 0, 0, 0);
-  return d;
-}
-
-function dateToTime(d: Date): string {
-  return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
-}
 
 export function RemindersScreen() {
   const insets = useSafeAreaInsets();
+  const g = useGlobalStyles();
+  const { colors } = useTheme();
   const {
     reminders,
     addReminder,
@@ -53,9 +45,9 @@ export function RemindersScreen() {
   useEffect(() => {
     requestPermissions();
     rescheduleAllReminders(async (id, notificationId) => {
-      await updateReminder(id, { notificationId });
+      await updateReminderState(id, { notificationId });
     }).then(() => refresh());
-  }, [refresh]);
+  }, [refresh, updateReminderState]);
 
   const openAdd = () => {
     setEditing(null);
@@ -139,7 +131,7 @@ export function RemindersScreen() {
             <Switch
               value={item.enabled}
               onValueChange={(v) => onToggleEnabled(item, v)}
-              trackColor={{ false: "#ccc", true: "#4a9eff" }}
+              trackColor={{ false: colors.switchTrack, true: colors.primary }}
             />
             <TouchableOpacity onPress={() => openEdit(item)} style={g.actionBtn}>
               <Text style={g.linkText}>Edit</Text>
@@ -159,7 +151,7 @@ export function RemindersScreen() {
               value={title}
               onChangeText={setTitle}
               placeholder="Title (e.g. Feed time)"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.placeholder}
             />
             <TouchableOpacity style={styles.timeRow} onPress={() => setShowTimePicker(true)}>
               <Text style={[g.labelMuted, styles.timeLabel]}>Time</Text>
