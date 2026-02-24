@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import * as FileSystem from "expo-file-system";
+import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import * as DocumentPicker from "expo-document-picker";
 import * as MailComposer from "expo-mail-composer";
@@ -28,13 +28,11 @@ export function useBackup(refreshAll: () => void) {
       const payload = await getExportPayload();
       const json = exportToJson(payload);
       const name = `feed-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      const path = `${FileSystem.cacheDirectory}${name}`;
-      await FileSystem.writeAsStringAsync(path, json, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
+      const file = new File(Paths.cache, name);
+      file.write(json);
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
-        await Sharing.shareAsync(path, {
+        await Sharing.shareAsync(file.uri, {
           mimeType: "application/json",
           dialogTitle: t("backupExportDialogTitle"),
         });
@@ -63,10 +61,8 @@ export function useBackup(refreshAll: () => void) {
         setImporting(false);
         return;
       }
-      const uri = result.assets[0].uri;
-      const json = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
+      const pickedFile = new File(result.assets[0]);
+      const json = pickedFile.textSync();
       const importResult: ImportResult = await importFromJson(json);
       if (importResult.ok) {
         refreshAll();
@@ -100,10 +96,8 @@ export function useBackup(refreshAll: () => void) {
       const payload = await getExportPayload();
       const json = exportToJson(payload);
       const name = `feed-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      const path = `${FileSystem.cacheDirectory}${name}`;
-      await FileSystem.writeAsStringAsync(path, json, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
+      const file = new File(Paths.cache, name);
+      file.write(json);
       const available = await MailComposer.isAvailableAsync();
       if (!available) {
         setIsSuccess(false);
@@ -117,7 +111,7 @@ export function useBackup(refreshAll: () => void) {
         recipients: [trimmed],
         subject: subjectLine,
         body: "Feed backup attachment.",
-        attachments: [path],
+        attachments: [file.uri],
       });
       if (result.status === "sent") {
         setIsSuccess(true);

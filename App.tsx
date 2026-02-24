@@ -4,7 +4,6 @@ import { useFonts } from "expo-font";
 import * as DevClient from "expo-dev-client";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Text, View, Platform } from "react-native";
 import {
@@ -15,7 +14,7 @@ import {
 } from "@expo-google-fonts/nunito";
 import { MainScreen } from "./src/screens/MainScreen";
 import { StatisticsScreen } from "./src/screens/StatisticsScreen";
-import { FoodTypesScreen } from "./src/screens/FoodTypesScreen";
+import { LoadDataScreen } from "./src/screens/LoadDataScreen";
 import { RemindersScreen } from "./src/screens/RemindersScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ThemeProvider, useTheme } from "./src/contexts/ThemeContext";
@@ -25,7 +24,6 @@ import type { RootTabParamList } from "./src/navigation/types";
 import type { TranslationKey } from "./src/i18n/en";
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
-const Stack = createNativeStackNavigator();
 
 const TAB_CONFIG: {
   name: keyof RootTabParamList;
@@ -33,7 +31,7 @@ const TAB_CONFIG: {
   titleKey: TranslationKey;
   component: React.ComponentType<any>;
 }[] = [
-  { name: "Home", labelKey: "tabsHome", titleKey: "screenTitlesBabyFeed", component: () => null },
+  { name: "Home", labelKey: "tabsHome", titleKey: "screenTitlesBabyFeed", component: MainScreen },
   {
     name: "Stats",
     labelKey: "tabsStats",
@@ -41,10 +39,10 @@ const TAB_CONFIG: {
     component: StatisticsScreen,
   },
   {
-    name: "FoodTypes",
-    labelKey: "tabsTypes",
-    titleKey: "screenTitlesFoodTypes",
-    component: FoodTypesScreen,
+    name: "LoadData",
+    labelKey: "tabsData",
+    titleKey: "screenTitlesLoadData",
+    component: LoadDataScreen,
   },
   {
     name: "Reminders",
@@ -59,18 +57,6 @@ const TAB_CONFIG: {
     component: SettingsScreen,
   },
 ];
-
-function HomeStack() {
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Main">
-        {({ navigation }) => (
-          <MainScreen onAddVariant={() => navigation.getParent()?.navigate("FoodTypes")} />
-        )}
-      </Stack.Screen>
-    </Stack.Navigator>
-  );
-}
 
 function TabIcon({
   label,
@@ -116,18 +102,7 @@ function AppTabs() {
           tabBarLabelStyle: { fontSize: 12, marginTop: 4, paddingBottom: 4 },
         }}
       >
-        <Tab.Screen
-          name="Home"
-          component={HomeStack}
-          options={{
-            title: t("screenTitlesBabyFeed"),
-            tabBarLabel: t("tabsHome"),
-            tabBarIcon: ({ focused }) => (
-              <TabIcon label={t("tabsHome")} focused={focused} colors={colors} />
-            ),
-          }}
-        />
-        {TAB_CONFIG.slice(1).map(({ name, labelKey, titleKey, component }) => (
+        {TAB_CONFIG.map(({ name, labelKey, titleKey, component }) => (
           <Tab.Screen
             key={name}
             name={name}

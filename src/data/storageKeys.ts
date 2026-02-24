@@ -6,4 +6,6 @@ export const KEYS = {
   LOCALE: "@feed/locale",
   BACKUP_EMAIL: "@feed/backup_email",
   BACKUP_EMAIL_SUBJECT: "@feed/backup_email_subject",
+  PLAN_DAYS: "@feed/plan_days",
+  LOADED_SCHEDULES: "@feed/loaded_schedules",
 } as const;
