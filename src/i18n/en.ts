@@ -5,6 +5,8 @@ export const en = {
   settingsLanguage: "Language",
   settingsEnglish: "English",
   settingsRussian: "Russian",
+  settingsHideSubstitutions: "Hide substitutions",
+  settingsHideSubstitutionsSubtitle: "Hide substitutions on home and calculator",
 
   mainScreenTitle: "Baby Feed",
   mainChangeDate: "Change date",

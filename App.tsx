@@ -19,6 +19,7 @@ import { CalculatorScreen } from "./src/screens/CalculatorScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ThemeProvider, useTheme } from "./src/contexts/ThemeContext";
 import { LocaleProvider, useLocale } from "./src/contexts/LocaleContext";
+import { PreferencesProvider } from "./src/contexts/PreferencesContext";
 import { fonts } from "./src/theme";
 import type { RootTabParamList } from "./src/navigation/types";
 import type { TranslationKey } from "./src/i18n/en";
@@ -142,9 +143,11 @@ export default function App() {
     <SafeAreaProvider>
       <LocaleProvider>
         <ThemeProvider>
+          <PreferencesProvider>
           <NavigationContainer>
             <AppTabs />
           </NavigationContainer>
+          </PreferencesProvider>
         </ThemeProvider>
       </LocaleProvider>
     </SafeAreaProvider>

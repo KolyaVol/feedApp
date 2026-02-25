@@ -7,6 +7,8 @@ export const ru: Record<TranslationKey, string> = {
   settingsLanguage: "Язык",
   settingsEnglish: "English",
   settingsRussian: "Русский",
+  settingsHideSubstitutions: "Скрывать замены",
+  settingsHideSubstitutionsSubtitle: "Не показывать замены на главной и в калькуляторе",
 
   mainScreenTitle: "Кормление",
   mainChangeDate: "Изменить дату",

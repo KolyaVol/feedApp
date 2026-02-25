@@ -13,6 +13,7 @@ import { useSchedule } from "../hooks/useSchedule";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLocale } from "../contexts/LocaleContext";
+import { usePreferences } from "../contexts/PreferencesContext";
 import { fonts, spacing } from "../theme";
 
 interface FoodSummary {
@@ -27,6 +28,7 @@ export function CalculatorScreen() {
   const g = useGlobalStyles();
   const { t } = useLocale();
   const { colors } = useTheme();
+  const { hideSubstitutions } = usePreferences();
   const styles = useLocalStyles(colors);
   const { planDays, loading, refresh } = useSchedule();
   const [packageSizes, setPackageSizes] = useState<Record<string, string>>({});
@@ -109,7 +111,7 @@ export function CalculatorScreen() {
                 </Text>
               </View>
 
-              {item.substitutions.length > 0 && (
+              {!hideSubstitutions && item.substitutions.length > 0 && (
                 <View style={styles.subsSection}>
                   <Text style={styles.subsLabel}>
                     {t("calcAlternatives")}:

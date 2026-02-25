@@ -17,6 +17,7 @@ import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLocale } from "../contexts/LocaleContext";
 import { useReminders } from "../hooks/useReminders";
+import { usePreferences } from "../contexts/PreferencesContext";
 import { timeToDate, dateToTime } from "../utils/date";
 import {
   requestPermissions,
@@ -35,6 +36,7 @@ export function SettingsScreen() {
   const isDark = theme === "dark";
   const styles = useLocalStyles(colors);
 
+  const { hideSubstitutions, setHideSubstitutions } = usePreferences();
   const {
     reminders,
     addReminder,
@@ -203,6 +205,18 @@ export function SettingsScreen() {
         <Switch
           value={isDark}
           onValueChange={(v) => setTheme(v ? "dark" : "light")}
+          trackColor={{ false: colors.switchTrack, true: colors.primary }}
+        />
+      </View>
+
+      <View style={[g.cardRow, { marginHorizontal: 16 }]}>
+        <View style={g.rowText}>
+          <Text style={g.titleCard}>{t("settingsHideSubstitutions")}</Text>
+          <Text style={g.subtitle}>{t("settingsHideSubstitutionsSubtitle")}</Text>
+        </View>
+        <Switch
+          value={hideSubstitutions}
+          onValueChange={setHideSubstitutions}
           trackColor={{ false: colors.switchTrack, true: colors.primary }}
         />
       </View>

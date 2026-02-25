@@ -14,12 +14,14 @@ import { fonts, spacing } from "../theme";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLocale } from "../contexts/LocaleContext";
+import { usePreferences } from "../contexts/PreferencesContext";
 
 export function MainScreen() {
   const insets = useSafeAreaInsets();
   const g = useGlobalStyles();
   const { t } = useLocale();
   const { colors } = useTheme();
+  const { hideSubstitutions } = usePreferences();
   const styles = useLocalStyles(colors);
   const {
     schedules,
@@ -119,7 +121,7 @@ export function MainScreen() {
         </View>
       </View>
 
-      {plan.substitutions.length > 0 && (
+      {!hideSubstitutions && plan.substitutions.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("mainSubstitutions")}</Text>
           <View style={styles.chipsRow}>

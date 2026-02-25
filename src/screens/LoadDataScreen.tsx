@@ -86,18 +86,9 @@ export function LoadDataScreen() {
     }
   };
 
-  const handleDelete = (scheduleId: string) => {
-    Alert.alert(t("loadDataDeleteTitle"), t("loadDataDeleteMessage"), [
-      { text: t("loadDataCancel"), style: "cancel" },
-      {
-        text: t("loadDataDelete"),
-        style: "destructive",
-        onPress: async () => {
-          await deleteSchedule(scheduleId);
-          if (expandedId === scheduleId) setExpandedId(null);
-        },
-      },
-    ]);
+  const handleDelete = async (scheduleId: string) => {
+    await deleteSchedule(scheduleId);
+    if (expandedId === scheduleId) setExpandedId(null);
   };
 
   const openEditDay = (day: PlanDay) => {
@@ -143,15 +134,9 @@ export function LoadDataScreen() {
   return (
     <View style={g.screenContainer}>
       <ScrollView contentContainerStyle={g.screenContent}>
-        <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>
-          {t("loadDataTitle")}
-        </Text>
+        <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>{t("loadDataTitle")}</Text>
 
-        <TouchableOpacity
-          style={g.primaryButton}
-          onPress={handlePickFile}
-          disabled={importing}
-        >
+        <TouchableOpacity style={g.primaryButton} onPress={handlePickFile} disabled={importing}>
           {importing ? (
             <ActivityIndicator color={colors.card} />
           ) : (
@@ -164,9 +149,7 @@ export function LoadDataScreen() {
           onPress={() => setPasteModalVisible(true)}
           disabled={importing}
         >
-          <Text style={g.primaryButtonOutlineText}>
-            {t("loadDataPasteJson")}
-          </Text>
+          <Text style={g.primaryButtonOutlineText}>{t("loadDataPasteJson")}</Text>
         </TouchableOpacity>
 
         {schedules.length === 0 ? (
@@ -181,9 +164,7 @@ export function LoadDataScreen() {
               <View key={schedule.id} style={styles.scheduleCard}>
                 <TouchableOpacity
                   style={styles.scheduleHeader}
-                  onPress={() =>
-                    setExpandedId(isExpanded ? null : schedule.id)
-                  }
+                  onPress={() => setExpandedId(isExpanded ? null : schedule.id)}
                 >
                   <View style={styles.scheduleInfo}>
                     <Text style={g.titleCard}>
@@ -194,15 +175,10 @@ export function LoadDataScreen() {
                       {formatDateDisplay(schedule.endDate)}
                     </Text>
                   </View>
-                  <TouchableOpacity
-                    onPress={() => handleDelete(schedule.id)}
-                    style={g.actionBtn}
-                  >
+                  <TouchableOpacity onPress={() => handleDelete(schedule.id)} style={g.actionBtn}>
                     <Text style={g.deleteText}>{t("loadDataDelete")}</Text>
                   </TouchableOpacity>
-                  <Text style={styles.expandIcon}>
-                    {isExpanded ? "▲" : "▼"}
-                  </Text>
+                  <Text style={styles.expandIcon}>{isExpanded ? "▲" : "▼"}</Text>
                 </TouchableOpacity>
 
                 {isExpanded && (
@@ -214,14 +190,13 @@ export function LoadDataScreen() {
                         onPress={() => openEditDay(day)}
                       >
                         <View style={styles.dayDate}>
-                          <Text style={styles.dayDateText}>
-                            {formatDateDisplay(day.date)}
-                          </Text>
+                          <Text style={styles.dayDateText}>{formatDateDisplay(day.date)}</Text>
                         </View>
                         <View style={styles.dayInfo}>
                           <Text style={g.titleCard}>{day.food}</Text>
                           <Text style={g.subtitle}>
-                            {day.amountGrams}{t("loadDataGrams")} · {day.foodType}
+                            {day.amountGrams}
+                            {t("loadDataGrams")} · {day.foodType}
                           </Text>
                         </View>
                         <Text style={styles.editIcon}>✎</Text>
@@ -315,10 +290,7 @@ export function LoadDataScreen() {
             />
 
             <View style={g.modalButtons}>
-              <TouchableOpacity
-                style={g.cancelBtn}
-                onPress={() => setEditingDay(null)}
-              >
+              <TouchableOpacity style={g.cancelBtn} onPress={() => setEditingDay(null)}>
                 <Text style={g.cancelBtnText}>{t("loadDataCancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={g.saveBtn} onPress={saveDay}>

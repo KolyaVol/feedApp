@@ -8,4 +8,5 @@ export const KEYS = {
   BACKUP_EMAIL_SUBJECT: "@feed/backup_email_subject",
   PLAN_DAYS: "@feed/plan_days",
   LOADED_SCHEDULES: "@feed/loaded_schedules",
+  HIDE_SUBSTITUTIONS: "@feed/hide_substitutions",
 } as const;
