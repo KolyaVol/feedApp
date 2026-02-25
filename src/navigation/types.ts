@@ -2,7 +2,7 @@ export type RootTabParamList = {
   Home: undefined;
   Stats: undefined;
   LoadData: undefined;
-  Reminders: undefined;
+  Calculator: undefined;
   Settings: undefined;
 };
 

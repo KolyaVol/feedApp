@@ -15,7 +15,7 @@ import {
 import { MainScreen } from "./src/screens/MainScreen";
 import { StatisticsScreen } from "./src/screens/StatisticsScreen";
 import { LoadDataScreen } from "./src/screens/LoadDataScreen";
-import { RemindersScreen } from "./src/screens/RemindersScreen";
+import { CalculatorScreen } from "./src/screens/CalculatorScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ThemeProvider, useTheme } from "./src/contexts/ThemeContext";
 import { LocaleProvider, useLocale } from "./src/contexts/LocaleContext";
@@ -45,10 +45,10 @@ const TAB_CONFIG: {
     component: LoadDataScreen,
   },
   {
-    name: "Reminders",
-    labelKey: "tabsReminders",
-    titleKey: "tabsReminders",
-    component: RemindersScreen,
+    name: "Calculator",
+    labelKey: "tabsCalc",
+    titleKey: "screenTitlesCalculator",
+    component: CalculatorScreen,
   },
   {
     name: "Settings",

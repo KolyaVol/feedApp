@@ -2,32 +2,9 @@ export const en = {
   settingsTitle: "Settings",
   settingsDarkTheme: "Dark theme",
   settingsDarkThemeSubtitle: "Use dark appearance",
-  settingsData: "Data",
-  settingsDataSubtitle: "Download backup or load from file",
-  settingsDownload: "Download",
-  settingsLoad: "Load",
   settingsLanguage: "Language",
   settingsEnglish: "English",
   settingsRussian: "Russian",
-
-  backupDataRestored: "Data restored successfully",
-  backupExportFailed: "Export failed",
-  backupImportFailed: "Import failed",
-  backupSharingUnavailable: "Sharing is not available on this device",
-  backupInvalidJson: "Invalid JSON",
-  backupInvalidBackupFormat: "Invalid backup format",
-  backupNoData: "Backup contains no valid data",
-  backupExportDialogTitle: "Export feed data",
-  backupEmailNotConfigured: "Set email in Backup by email section",
-  backupMailUnavailable: "Mail is not available on this device",
-  backupMailSent: "Mail sent",
-  backupMailCancelled: "Mail cancelled",
-  backupSendToEmail: "Send to email",
-
-  settingsBackupByEmail: "Backup by email",
-  settingsBackupByEmailSubtitle: "Send backup file to your email",
-  settingsBackupEmailPlaceholder: "Email address",
-  settingsBackupSubjectPlaceholder: "Subject (optional)",
 
   mainScreenTitle: "Baby Feed",
   mainChangeDate: "Change date",
@@ -90,6 +67,14 @@ export const en = {
   loadDataNotes: "Notes",
   loadDataSave: "Save",
 
+  calcTitle: "Shopping Calculator",
+  calcEmpty: "No data loaded. Load a schedule first.",
+  calcGrams: "g",
+  calcNeeded: "Total needed",
+  calcAlternatives: "Alternatives",
+  calcPackageSize: "Package size",
+  calcPackagesNeeded: "Buy",
+
   statsScreenTitle: "Statistics",
   statsDaily: "Daily",
   statsWeekly: "Weekly",
@@ -125,6 +110,7 @@ export const en = {
   tabsStats: "Stats",
   tabsTypes: "Types",
   tabsData: "Data",
+  tabsCalc: "Cart",
   tabsReminders: "Reminders",
   tabsSettings: "Settings",
 
@@ -132,6 +118,7 @@ export const en = {
   screenTitlesStatistics: "Statistics",
   screenTitlesFoodTypes: "Food types",
   screenTitlesLoadData: "Load Data",
+  screenTitlesCalculator: "Shopping Calculator",
 } as const;
 
 export type TranslationKey = keyof typeof en;
