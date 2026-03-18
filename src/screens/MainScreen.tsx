@@ -81,6 +81,18 @@ export function MainScreen() {
     return dayNumber ? `${todayStr} · ${t("loadDataDay")} ${dayNumber}` : todayStr;
   }, [dayNumber, t, todayStr]);
 
+  const daysRemainingAlert = useMemo(() => {
+    const end = schedule?.endDate;
+    if (!end) return null;
+    const endMs = new Date(end + "T00:00:00").getTime();
+    const curMs = new Date(progressDateStr + "T00:00:00").getTime();
+    const days = Math.floor((endMs - curMs) / 86400000);
+    if (days > 7) return null;
+    if (days <= 3) return { level: "red" as const, days };
+    if (days <= 5) return { level: "orange" as const, days };
+    return { level: "yellow" as const, days };
+  }, [schedule?.endDate, progressDateStr]);
+
   if (loading) {
     return (
       <View style={[g.screenContainer, styles.center]}>
@@ -113,6 +125,26 @@ export function MainScreen() {
         {t("mainScreenTitle")}
       </Text>
       <Text style={styles.dateHeader}>{todayHeader}</Text>
+
+      {daysRemainingAlert ? (
+        <View
+          style={[
+            styles.updateDataAlert,
+            {
+              backgroundColor:
+                daysRemainingAlert.level === "red"
+                  ? colors.pastelRed
+                  : daysRemainingAlert.level === "orange"
+                    ? colors.pastelOrange
+                    : colors.pastelYellow,
+            },
+          ]}
+        >
+          <Text style={[styles.updateDataAlertText, { color: colors.text }]}>
+            {t("loadDataUpdateDataAlert")}
+          </Text>
+        </View>
+      ) : null}
 
       <View style={styles.mainCard}>
         <Text style={styles.foodTypeLabel}>{plan.foodType}</Text>
@@ -178,6 +210,8 @@ function useLocalStyles(colors: {
   background: string;
   pastelGreen: string;
   pastelYellow: string;
+  pastelOrange: string;
+  pastelRed: string;
 }) {
   return React.useMemo(
     () =>
@@ -190,6 +224,18 @@ function useLocalStyles(colors: {
           paddingHorizontal: spacing.screenPadding,
           marginBottom: 16,
           textTransform: "capitalize",
+        },
+        updateDataAlert: {
+          marginHorizontal: spacing.screenPadding,
+          marginBottom: 16,
+          paddingVertical: 14,
+          paddingHorizontal: 18,
+          borderRadius: spacing.radiusMd,
+        },
+        updateDataAlertText: {
+          fontSize: 15,
+          fontFamily: fonts.medium,
+          textAlign: "center",
         },
         mainCard: {
           marginHorizontal: spacing.screenPadding,

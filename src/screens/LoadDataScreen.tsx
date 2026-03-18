@@ -491,6 +491,12 @@ export function LoadDataScreen() {
 
   const selectedStartDate = selectedSchedule?.startDate ?? null;
 
+  const isProgressInRange =
+    selectedSchedule &&
+    progressDayStr >= selectedSchedule.startDate &&
+    progressDayStr <= selectedSchedule.endDate;
+  const isLastDay = selectedSchedule && progressDayStr === selectedSchedule.endDate;
+
   const scrollToCurrentDayRow = useCallback(() => {
     const y = rowYByDate[progressDayStr];
     if (typeof y !== "number") return;
@@ -524,7 +530,7 @@ export function LoadDataScreen() {
           </View>
         ) : (
           <>
-            {todayRow ? (
+            {(todayRow || isProgressInRange) ? (
               <View style={[styles.todayWrap, { borderColor: colors.borderLight, backgroundColor: colors.card }]}>
                 <Text style={[styles.todayTitle, { color: colors.text }]}>
                   {t("loadDataCurrentDay")}
@@ -537,11 +543,14 @@ export function LoadDataScreen() {
                     <Text style={[styles.progressBtnText, { color: colors.text }]}>{t("loadDataPrev")}</Text>
                   </TouchableOpacity>
                   <Text style={[styles.progressLabel, { color: colors.textMuted }]}>
-                    {formatDateDisplay(progressDayStr, locale)}
+                    {selectedStartDate
+                      ? `${t("loadDataDay")} ${dayIndexFromStart(selectedStartDate, progressDayStr)}`
+                      : formatDateDisplay(progressDayStr, locale)}
                   </Text>
                   <TouchableOpacity
-                    style={[styles.progressBtn, { borderColor: colors.borderLight }]}
-                    onPress={() => setProgressDate(addDays(progressDayStr, 1))}
+                    style={[styles.progressBtn, { borderColor: colors.borderLight }, isLastDay && g.buttonDisabled]}
+                    disabled={!!isLastDay}
+                    onPress={() => !isLastDay && setProgressDate(addDays(progressDayStr, 1))}
                   >
                     <Text style={[styles.progressBtnText, { color: colors.text }]}>{t("loadDataNext")}</Text>
                   </TouchableOpacity>
@@ -549,6 +558,12 @@ export function LoadDataScreen() {
                     <Text style={[styles.progressResetText, { color: colors.primary }]}>{t("loadDataCurrentDay")}</Text>
                   </TouchableOpacity>
                 </View>
+              </View>
+            ) : null}
+
+            {isLastDay ? (
+              <View style={[styles.lastDayAlert, { backgroundColor: colors.chipBg, borderColor: colors.borderLight }]}>
+                <Text style={[styles.lastDayAlertText, { color: colors.text }]}>{t("loadDataLastDayAlert")}</Text>
               </View>
             ) : null}
 
@@ -816,6 +831,19 @@ function useLocalStyles(colors: {
           paddingBottom: 10,
           fontSize: 22,
           fontFamily: fonts.medium,
+        },
+        lastDayAlert: {
+          marginHorizontal: spacing.screenPadding,
+          marginBottom: 18,
+          paddingVertical: 14,
+          paddingHorizontal: 18,
+          borderRadius: spacing.radiusMd,
+          borderWidth: 1,
+        },
+        lastDayAlertText: {
+          fontSize: 15,
+          fontFamily: fonts.medium,
+          textAlign: "center",
         },
         progressControls: {
           flexDirection: "row",

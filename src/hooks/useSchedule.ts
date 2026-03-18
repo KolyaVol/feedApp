@@ -50,7 +50,12 @@ export function useSchedule() {
 
   useEffect(() => {
     AsyncStorage.getItem(KEYS.PROGRESS_DATE).then((stored) => {
-      if (stored && /^\d{4}-\d{2}-\d{2}$/.test(stored)) setProgressDateStr(stored);
+      const realToday = formatDateStr(new Date());
+      const validStored = stored && /^\d{4}-\d{2}-\d{2}$/.test(stored);
+      const toUse =
+        validStored && stored >= realToday ? stored : realToday;
+      if (toUse !== stored) AsyncStorage.setItem(KEYS.PROGRESS_DATE, toUse);
+      setProgressDateStr(toUse);
     });
   }, []);
 

@@ -64,6 +64,14 @@ export async function rescheduleAllReminders(
   await scheduleDailyPlanNotification();
 }
 
+const PLAN_NOTIFICATION_DAYS_AHEAD = 14;
+
+function dateAtTime(dateStr: string, time: string): Date {
+  const [y, mo, d] = dateStr.split("-").map(Number);
+  const { hour, minute } = parseTime(time);
+  return new Date(y, (mo ?? 1) - 1, d ?? 1, hour, minute, 0, 0);
+}
+
 export async function scheduleDailyPlanNotification(): Promise<void> {
   const granted = await requestPermissions();
   if (!granted) return;
@@ -79,24 +87,25 @@ export async function scheduleDailyPlanNotification(): Promise<void> {
   }
 
   const days = await getPlanDays();
-  const base = (await AsyncStorage.getItem(KEYS.PROGRESS_DATE)) || formatDateStr(new Date());
-  const tomorrowStr = addDays(base, 1);
-  const tomorrowPlan = getPlanDayForDate(days, tomorrowStr);
+  const realToday = formatDateStr(new Date());
+  const now = Date.now();
 
-  if (!tomorrowPlan) return;
-
-  const { hour, minute } = parseTime(tomorrowPlan.time);
-
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: `${tomorrowPlan.food} ${tomorrowPlan.amountGrams}г`,
-      body: tomorrowPlan.foodType,
-      data: { tag: PLAN_NOTIFICATION_TAG },
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour,
-      minute,
-    },
-  });
+  for (let i = 0; i < PLAN_NOTIFICATION_DAYS_AHEAD; i++) {
+    const dateStr = addDays(realToday, i);
+    const plan = getPlanDayForDate(days, dateStr);
+    if (!plan) continue;
+    const triggerDate = dateAtTime(dateStr, plan.time);
+    if (triggerDate.getTime() <= now) continue;
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `${plan.food} ${plan.amountGrams}г`,
+        body: plan.foodType,
+        data: { tag: PLAN_NOTIFICATION_TAG },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: triggerDate,
+      },
+    });
+  }
 }

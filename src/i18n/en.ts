@@ -99,6 +99,8 @@ export const en = {
   loadDataPrev: "Prev",
   loadDataNext: "Next",
   loadDataResetProgress: "Reset",
+  loadDataUpdateDataAlert: "Update data — few days left in schedule",
+  loadDataLastDayAlert: "This is the last day of the schedule.",
 
   calcTitle: "Shopping Calculator",
   calcEmpty: "No data loaded. Load a schedule first.",

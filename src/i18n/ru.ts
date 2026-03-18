@@ -101,6 +101,8 @@ export const ru: Record<TranslationKey, string> = {
   loadDataPrev: "Назад",
   loadDataNext: "Вперёд",
   loadDataResetProgress: "Сброс",
+  loadDataUpdateDataAlert: "Обновите данные — до конца расписания осталось мало дней",
+  loadDataLastDayAlert: "Это последний день расписания.",
 
   calcTitle: "Калькулятор покупок",
   calcEmpty: "Данные не загружены. Сначала загрузите расписание.",
