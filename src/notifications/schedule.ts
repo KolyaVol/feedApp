@@ -1,16 +1,21 @@
-import * as Notifications from "expo-notifications";
+import { Platform } from "react-native";
 import type { Reminder } from "../types";
 import { getReminders } from "../data/reminders";
 import { getPlanDays, formatDateStr, addDays, getPlanDayForDate } from "../data/planDays";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+const Notifications =
+  Platform.OS === "web" ? null : require("expo-notifications") as typeof import("expo-notifications");
+
+if (Notifications) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
 
 const PLAN_NOTIFICATION_TAG = "daily-plan-notification";
 
@@ -20,6 +25,7 @@ function parseTime(time: string): { hour: number; minute: number } {
 }
 
 export async function requestPermissions(): Promise<boolean> {
+  if (!Notifications) return false;
   const { status: existing } = await Notifications.getPermissionsAsync();
   if (existing === "granted") return true;
   const { status } = await Notifications.requestPermissionsAsync();
@@ -27,6 +33,7 @@ export async function requestPermissions(): Promise<boolean> {
 }
 
 export async function scheduleReminder(reminder: Reminder): Promise<string | null> {
+  if (!Notifications) return null;
   const granted = await requestPermissions();
   if (!granted) return null;
   const { hour, minute } = parseTime(reminder.time);
@@ -42,10 +49,12 @@ export async function scheduleReminder(reminder: Reminder): Promise<string | nul
 }
 
 export async function cancelScheduledNotification(notificationId: string): Promise<void> {
+  if (!Notifications) return;
   await Notifications.cancelScheduledNotificationAsync(notificationId);
 }
 
 export async function cancelAllScheduledNotifications(): Promise<void> {
+  if (!Notifications) return;
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
@@ -63,6 +72,7 @@ export async function rescheduleAllReminders(
 }
 
 export async function scheduleDailyPlanNotification(): Promise<void> {
+  if (!Notifications) return;
   const granted = await requestPermissions();
   if (!granted) return;
 

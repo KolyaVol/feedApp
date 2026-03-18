@@ -8,13 +8,15 @@ export function useEntries(selectedDate?: Date): {
   loading: boolean;
   refresh: () => Promise<void>;
   addEntry: (entry: Omit<FeedEntry, "id">) => Promise<FeedEntry>;
+  updateEntry: (id: string, updates: Partial<Omit<FeedEntry, "id">>) => Promise<void>;
   deleteEntry: (id: string) => Promise<void>;
   entriesForDate: FeedEntry[];
 } {
   const date = selectedDate ?? new Date();
-  const { items: entries, loading, refresh, add, remove } = useAsyncList<FeedEntry>({
+  const { items: entries, loading, refresh, add, update, remove } = useAsyncList<FeedEntry>({
     fetch: entriesData.getEntries,
     add: entriesData.addEntry,
+    update: entriesData.updateEntry,
     remove: entriesData.deleteEntry,
   });
 
@@ -33,6 +35,13 @@ export function useEntries(selectedDate?: Date): {
     [add],
   );
 
+  const updateEntry = useCallback(
+    async (id: string, updates: Partial<Omit<FeedEntry, "id">>) => {
+      await update!(id, updates);
+    },
+    [update],
+  );
+
   const deleteEntry = useCallback(
     async (id: string) => {
       await remove!(id);
@@ -45,6 +54,7 @@ export function useEntries(selectedDate?: Date): {
     loading,
     refresh,
     addEntry,
+    updateEntry,
     deleteEntry,
     entriesForDate,
   };

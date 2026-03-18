@@ -9,11 +9,11 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import * as DocumentPicker from "expo-document-picker";
-import { File } from "expo-file-system";
 import { useSchedule } from "../hooks/useSchedule";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
@@ -61,8 +61,10 @@ export function LoadDataScreen() {
       });
       if (result.canceled || !result.assets?.length) return;
       setImporting(true);
-      const pickedFile = new File(result.assets[0]);
-      const content = pickedFile.textSync();
+      const content =
+        Platform.OS === "web"
+          ? await (await fetch(result.assets[0].uri)).text()
+          : new (require("expo-file-system").File)(result.assets[0]).textSync();
       await loadJson(content);
       setImporting(false);
     } catch (e: any) {

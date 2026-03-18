@@ -1,21 +1,18 @@
 import type { LoadedSchedule } from "../types";
-import { KEYS } from "./storageKeys";
-import { createStorageList } from "./storage";
+import * as api from "../api/loadedSchedules";
 
-export const schedulesStorage = createStorageList<LoadedSchedule>(
-  KEYS.LOADED_SCHEDULES,
-);
+export async function getLoadedSchedules(): Promise<LoadedSchedule[]> {
+  return api.getLoadedSchedules();
+}
 
-export const getLoadedSchedules = schedulesStorage.getList;
-export const setLoadedSchedules = schedulesStorage.setList;
+export async function setLoadedSchedules(_items: LoadedSchedule[]): Promise<void> {
+  // Cloud sync: full replace not supported
+}
 
-export async function addLoadedSchedule(
-  schedule: LoadedSchedule,
-): Promise<void> {
-  const existing = await getLoadedSchedules();
-  await setLoadedSchedules([...existing, schedule]);
+export async function addLoadedSchedule(schedule: LoadedSchedule): Promise<void> {
+  await api.addLoadedSchedule(schedule);
 }
 
 export async function deleteLoadedSchedule(id: string): Promise<void> {
-  return schedulesStorage.deleteItem(id);
+  await api.deleteLoadedSchedule(id);
 }

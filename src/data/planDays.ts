@@ -1,29 +1,24 @@
 import type { PlanDay } from "../types";
-import { KEYS } from "./storageKeys";
-import { createStorageList } from "./storage";
+import * as api from "../api/planDays";
 
-export const planDaysStorage = createStorageList<PlanDay>(KEYS.PLAN_DAYS);
+export async function getPlanDays(): Promise<PlanDay[]> {
+  return api.getPlanDays();
+}
 
-export const getPlanDays = planDaysStorage.getList;
-export const setPlanDays = planDaysStorage.setList;
+export async function setPlanDays(_items: PlanDay[]): Promise<void> {
+  // Cloud sync: full replace not supported
+}
 
 export async function addPlanDays(days: PlanDay[]): Promise<void> {
-  const existing = await getPlanDays();
-  await setPlanDays([...existing, ...days]);
+  await api.addPlanDays(days);
 }
 
-export async function updatePlanDay(
-  id: string,
-  updates: Partial<PlanDay>,
-): Promise<void> {
-  return planDaysStorage.updateItem(id, updates);
+export async function updatePlanDay(id: string, updates: Partial<PlanDay>): Promise<void> {
+  await api.updatePlanDay(id, updates);
 }
 
-export async function deletePlanDaysBySchedule(
-  scheduleId: string,
-): Promise<void> {
-  const all = await getPlanDays();
-  await setPlanDays(all.filter((d) => d.scheduleId !== scheduleId));
+export async function deletePlanDaysBySchedule(scheduleId: string): Promise<void> {
+  await api.deletePlanDaysBySchedule(scheduleId);
 }
 
 export function getPlanDayForDate(

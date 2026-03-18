@@ -1,20 +1,24 @@
 import type { Reminder } from "../types";
-import { KEYS } from "./storageKeys";
-import { createStorageList } from "./storage";
+import { generateId } from "../utils/id";
+import * as api from "../api/reminders";
 
-export const remindersStorage = createStorageList<Reminder>(KEYS.REMINDERS);
+export async function getReminders(): Promise<Reminder[]> {
+  return api.getReminders();
+}
 
-export const getReminders = remindersStorage.getList;
-export const setReminders = remindersStorage.setList;
+export async function setReminders(_items: Reminder[]): Promise<void> {
+  // Cloud sync: full replace not supported
+}
 
 export async function addReminder(reminder: Omit<Reminder, "id">): Promise<Reminder> {
-  return remindersStorage.addItem(reminder);
+  const id = generateId();
+  return api.addReminder({ ...reminder, id });
 }
 
 export async function updateReminder(id: string, updates: Partial<Reminder>): Promise<void> {
-  return remindersStorage.updateItem(id, updates);
+  await api.updateReminder(id, updates);
 }
 
 export async function deleteReminder(id: string): Promise<void> {
-  return remindersStorage.deleteItem(id);
+  await api.deleteReminder(id);
 }

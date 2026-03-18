@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import type { PlanDay, LoadedSchedule } from "../types";
 import {
   getPlanDays,
-  setPlanDays,
   addPlanDays,
   updatePlanDay as updatePlanDayStorage,
   deletePlanDaysBySchedule,
