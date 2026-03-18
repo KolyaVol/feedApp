@@ -95,6 +95,7 @@ export const en = {
   loadDataClose: "Close",
   loadDataToday: "Today",
   loadDataCurrentDay: "Current day",
+  loadDataDay: "Day",
   loadDataPrev: "Prev",
   loadDataNext: "Next",
   loadDataResetProgress: "Reset",

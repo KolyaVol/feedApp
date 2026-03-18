@@ -60,6 +60,14 @@ export function MainScreen() {
   const plan = todayPlan();
   const schedule = plan ? getScheduleForDay(plan) : undefined;
 
+  const dayNumber = useMemo(() => {
+    if (!schedule || !plan) return null;
+    const start = new Date(schedule.startDate + "T00:00:00").getTime();
+    const cur = new Date(plan.date + "T00:00:00").getTime();
+    const diffDays = Math.floor((cur - start) / 86400000);
+    return diffDays + 1;
+  }, [plan, schedule]);
+
   const todayStr = useMemo(() => {
     const now = new Date(progressDateStr + "T00:00:00");
     return now.toLocaleDateString(undefined, {
@@ -68,6 +76,10 @@ export function MainScreen() {
       month: "long",
     });
   }, [progressDateStr]);
+
+  const todayHeader = useMemo(() => {
+    return dayNumber ? `${todayStr} · ${t("loadDataDay")} ${dayNumber}` : todayStr;
+  }, [dayNumber, t, todayStr]);
 
   if (loading) {
     return (
@@ -83,7 +95,7 @@ export function MainScreen() {
         <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>
           {t("mainScreenTitle")}
         </Text>
-        <Text style={styles.dateHeader}>{todayStr}</Text>
+        <Text style={styles.dateHeader}>{todayHeader}</Text>
         <View style={styles.emptyCard}>
           <Text style={styles.emptyIcon}>📋</Text>
           <Text style={g.emptyText}>{t("mainNoPlan")}</Text>
@@ -100,7 +112,7 @@ export function MainScreen() {
       <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>
         {t("mainScreenTitle")}
       </Text>
-      <Text style={styles.dateHeader}>{todayStr}</Text>
+      <Text style={styles.dateHeader}>{todayHeader}</Text>
 
       <View style={styles.mainCard}>
         <Text style={styles.foodTypeLabel}>{plan.foodType}</Text>

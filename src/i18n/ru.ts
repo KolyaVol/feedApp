@@ -97,6 +97,7 @@ export const ru: Record<TranslationKey, string> = {
   loadDataClose: "Закрыть",
   loadDataToday: "Сегодня",
   loadDataCurrentDay: "Текущий день",
+  loadDataDay: "День",
   loadDataPrev: "Назад",
   loadDataNext: "Вперёд",
   loadDataResetProgress: "Сброс",

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -43,14 +43,173 @@ function formatDateDisplay(dateStr: string, locale?: string) {
   return d.toLocaleDateString(locale, { day: "numeric", month: "short" });
 }
 
+function dayIndexFromStart(startDateStr: string, dateStr: string): number {
+  const start = new Date(startDateStr + "T00:00:00").getTime();
+  const cur = new Date(dateStr + "T00:00:00").getTime();
+  const diffDays = Math.floor((cur - start) / 86400000);
+  return diffDays + 1;
+}
+
+function listChangedFields(params: {
+  originalById: Record<string, PlanDay>;
+  draftById: Record<string, PlanDay>;
+  amountTextById: Record<string, string>;
+  subsTextById: Record<string, string>;
+}): { day: PlanDay; fields: string[] }[] {
+  const out: { day: PlanDay; fields: string[] }[] = [];
+  for (const id of Object.keys(params.draftById)) {
+    const draft = params.draftById[id];
+    const orig = params.originalById[id];
+    if (!draft || !orig) continue;
+
+    const fields: string[] = [];
+    if (draft.time !== orig.time) fields.push("time");
+    if (draft.foodType !== orig.foodType) fields.push("type");
+    if (draft.food !== orig.food) fields.push("food");
+    if (draft.notes !== orig.notes) fields.push("notes");
+
+    const amtDraft = parseInt((params.amountTextById[id] ?? String(draft.amountGrams)).trim() || "0", 10);
+    const amtOrig = orig.amountGrams;
+    if (!isNaN(amtDraft) && amtDraft !== amtOrig) fields.push("amount");
+
+    const subsDraft = (params.subsTextById[id] ?? draft.substitutions.join(", "))
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(", ");
+    const subsOrig = orig.substitutions.join(", ");
+    if (subsDraft !== subsOrig) fields.push("subs");
+
+    if (fields.length) out.push({ day: draft, fields });
+  }
+  return out.sort((a, b) => a.day.date.localeCompare(b.day.date));
+}
+
 function toBase64Utf8(text: string): string | null {
-  const btoaFn = (globalThis as any)?.btoa as ((s: string) => string) | undefined;
-  if (!btoaFn) return null;
-  return btoaFn(unescape(encodeURIComponent(text)));
+  try {
+    const anyGlobal = globalThis as any;
+    if (anyGlobal?.Buffer?.from) {
+      return anyGlobal.Buffer.from(text, "utf8").toString("base64");
+    }
+
+    const enc = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
+    const bytes = enc ? enc.encode(text) : null;
+    if (!bytes) return null;
+
+    const table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let out = "";
+    for (let i = 0; i < bytes.length; i += 3) {
+      const a = bytes[i] ?? 0;
+      const b = bytes[i + 1] ?? 0;
+      const c = bytes[i + 2] ?? 0;
+      const triple = (a << 16) | (b << 8) | c;
+
+      out += table[(triple >> 18) & 63]!;
+      out += table[(triple >> 12) & 63]!;
+      out += i + 1 < bytes.length ? table[(triple >> 6) & 63]! : "=";
+      out += i + 2 < bytes.length ? table[triple & 63]! : "=";
+    }
+    return out;
+  } catch {
+    return null;
+  }
 }
 
 function jsonString(value: unknown) {
   return JSON.stringify(value, null, 2);
+}
+
+function readEnv(name: string): string | undefined {
+  const v = (process.env as any)?.[name] as unknown;
+  if (typeof v !== "string") return undefined;
+  const trimmed = v.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function githubPathEncode(path: string): string {
+  return path
+    .split("/")
+    .filter(Boolean)
+    .map((seg) => encodeURIComponent(seg))
+    .join("/");
+}
+
+async function readGithubContentsSha(opts: {
+  apiBase: string;
+  owner: string;
+  repo: string;
+  branch: string;
+  path: string;
+  token: string;
+}): Promise<{ sha?: string; notFound: boolean }> {
+  const url =
+    `${opts.apiBase.replace(/\/+$/, "")}` +
+    `/repos/${encodeURIComponent(opts.owner)}/${encodeURIComponent(opts.repo)}` +
+    `/contents/${githubPathEncode(opts.path)}?ref=${encodeURIComponent(opts.branch)}`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${opts.token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+
+  if (res.status === 404) return { sha: undefined, notFound: true };
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`GitHub GET contents failed (${res.status}): ${text || res.statusText}`);
+  }
+
+  const json = (await res.json()) as any;
+  const sha = json?.sha;
+  return { sha: typeof sha === "string" ? sha : undefined, notFound: false };
+}
+
+async function putGithubContents(opts: {
+  apiBase: string;
+  owner: string;
+  repo: string;
+  branch: string;
+  path: string;
+  token: string;
+  message: string;
+  contentBase64: string;
+  sha?: string;
+}): Promise<{ commitUrl?: string; commitSha?: string }> {
+  const url =
+    `${opts.apiBase.replace(/\/+$/, "")}` +
+    `/repos/${encodeURIComponent(opts.owner)}/${encodeURIComponent(opts.repo)}` +
+    `/contents/${githubPathEncode(opts.path)}`;
+
+  const body: Record<string, unknown> = {
+    message: opts.message,
+    content: opts.contentBase64,
+    branch: opts.branch,
+  };
+  if (opts.sha) body.sha = opts.sha;
+
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${opts.token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`GitHub PUT contents failed (${res.status}): ${text || res.statusText}`);
+  }
+
+  const json = (await res.json()) as any;
+  const commitSha = typeof json?.commit?.sha === "string" ? json.commit.sha : undefined;
+  const commitUrl = typeof json?.commit?.html_url === "string" ? json.commit.html_url : undefined;
+  return { commitSha, commitUrl };
 }
 
 function buildScheduleJson(schedule: LoadedSchedule, days: PlanDay[]): ScheduleJson {
@@ -94,10 +253,12 @@ export function LoadDataScreen() {
   const { colors } = useTheme();
   const styles = useLocalStyles(colors);
 
-  const { schedules, loading, refresh, getDaysForSchedule, todayPlan, progressDateStr, setProgressDate, resetProgressDate } =
-    useSchedule();
+  const { schedules, loading, refresh, getDaysForSchedule, todayPlan, progressDateStr, setProgressDate } = useSchedule();
 
   const availableSchedules = schedules;
+
+  const mainScrollRef = useRef<ScrollView | null>(null);
+  const [rowYByDate, setRowYByDate] = useState<Record<string, number>>({});
 
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
 
@@ -105,10 +266,13 @@ export function LoadDataScreen() {
   const [amountTextById, setAmountTextById] = useState<Record<string, string>>({});
   const [subsTextById, setSubsTextById] = useState<Record<string, string>>({});
   const [originalJsonText, setOriginalJsonText] = useState<string>("");
+  const [originalById, setOriginalById] = useState<Record<string, PlanDay>>({});
 
   const [sendBarCollapsed, setSendBarCollapsed] = useState(false);
   const [payloadModalVisible, setPayloadModalVisible] = useState(false);
   const [payloadText, setPayloadText] = useState("");
+  const [githubSending, setGithubSending] = useState(false);
+  const [githubResultText, setGithubResultText] = useState<string>("");
 
   const progressDayStr = progressDateStr;
 
@@ -176,6 +340,7 @@ export function LoadDataScreen() {
       amt[d.id] = String(d.amountGrams);
       subs[d.id] = d.substitutions.join(", ");
     }
+    setOriginalById(byId);
     setDraftById(byId);
     setAmountTextById(amt);
     setSubsTextById(subs);
@@ -193,6 +358,10 @@ export function LoadDataScreen() {
     });
   }, []);
 
+  const upsertDay = useCallback((day: PlanDay, updates: Partial<PlanDay>) => {
+    setDraftById((prev) => ({ ...prev, [day.id]: { ...(prev[day.id] ?? day), ...updates } }));
+  }, []);
+
   const openPayloadPreview = useCallback(() => {
     if (!selectedSchedule) return;
     const content = draftJsonText;
@@ -200,8 +369,10 @@ export function LoadDataScreen() {
     const payload = {
       message: "Update schedule",
       content: contentBase64 ?? "",
-      branch: "main",
-      path: `schedules/${selectedSchedule.month}-${selectedSchedule.id}.json`,
+      owner: readEnv("EXPO_PUBLIC_GITHUB_OWNER") ?? readEnv("GITHUB_OWNER") ?? "",
+      repo: readEnv("EXPO_PUBLIC_GITHUB_REPO") ?? readEnv("GITHUB_REPO") ?? "",
+      branch: readEnv("EXPO_PUBLIC_GITHUB_BRANCH") ?? readEnv("GITHUB_BRANCH") ?? "main",
+      path: readEnv("EXPO_PUBLIC_GITHUB_DATA_JSON_PATH") ?? readEnv("GITHUB_DATA_JSON_PATH") ?? "data.json",
     };
     setPayloadText(
       jsonString({
@@ -210,8 +381,86 @@ export function LoadDataScreen() {
         base64Available: !!contentBase64,
       }),
     );
+    setGithubResultText("");
     setPayloadModalVisible(true);
   }, [draftJsonText, selectedSchedule]);
+
+  const sendToGithub = useCallback(async () => {
+    if (!selectedSchedule) return;
+
+    if (!dirty) {
+      setGithubResultText("No changes to send.");
+      return;
+    }
+    if (amountInvalidCount > 0) {
+      setGithubResultText("Fix invalid amount cells before sending.");
+      return;
+    }
+
+    const token = readEnv("EXPO_PUBLIC_GITHUB_TOKEN") ?? readEnv("GITHUB_TOKEN");
+    const owner = readEnv("EXPO_PUBLIC_GITHUB_OWNER") ?? readEnv("GITHUB_OWNER");
+    const repo = readEnv("EXPO_PUBLIC_GITHUB_REPO") ?? readEnv("GITHUB_REPO");
+    const branch = readEnv("EXPO_PUBLIC_GITHUB_BRANCH") ?? readEnv("GITHUB_BRANCH") ?? "main";
+    const path = readEnv("EXPO_PUBLIC_GITHUB_DATA_JSON_PATH") ?? readEnv("GITHUB_DATA_JSON_PATH") ?? "data.json";
+    const apiBase = readEnv("EXPO_PUBLIC_GITHUB_API_BASE") ?? readEnv("GITHUB_API_BASE") ?? "https://api.github.com";
+
+    if (!token || !owner || !repo) {
+      setGithubResultText(
+        `Missing env.\n` +
+          `Need: EXPO_PUBLIC_GITHUB_TOKEN, EXPO_PUBLIC_GITHUB_OWNER, EXPO_PUBLIC_GITHUB_REPO\n` +
+          `Optional: EXPO_PUBLIC_GITHUB_BRANCH, EXPO_PUBLIC_GITHUB_DATA_JSON_PATH, EXPO_PUBLIC_GITHUB_API_BASE`,
+      );
+      return;
+    }
+
+    const content = draftJsonText;
+    const contentBase64 = toBase64Utf8(content);
+    if (!contentBase64) {
+      setGithubResultText("Base64 encoding is unavailable (globalThis.btoa missing).");
+      return;
+    }
+
+    setGithubSending(true);
+    setGithubResultText("Sending...");
+    try {
+      const { sha, notFound } = await readGithubContentsSha({ apiBase, owner, repo, branch, path, token });
+      const changes = listChangedFields({ originalById, draftById, amountTextById, subsTextById });
+      const start = selectedSchedule.startDate;
+      const first = changes[0];
+      const summary =
+        changes.length === 1 && first
+          ? `${t("loadDataDay")} ${dayIndexFromStart(start, first.day.date)}: ${first.fields.join(", ")}`
+          : changes.length
+            ? `${changes.length} days updated`
+            : "Update";
+      const message = `${summary} (${path})`;
+      const put = await putGithubContents({
+        apiBase,
+        owner,
+        repo,
+        branch,
+        path,
+        token,
+        message,
+        contentBase64,
+        sha: notFound ? undefined : sha,
+      });
+
+      setGithubResultText(
+        [
+          "Success.",
+          put.commitSha ? `commitSha: ${put.commitSha}` : "",
+          put.commitUrl ? `commitUrl: ${put.commitUrl}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+    } catch (e) {
+      setGithubResultText(String((e as any)?.message ?? e));
+    } finally {
+      setGithubSending(false);
+    }
+  }, [amountTextById, draftById, dirty, originalById, selectedSchedule, subsTextById, t]);
 
   const persistDay = useCallback(
     async (dayId: string, updates: Partial<PlanDay>) => {
@@ -240,6 +489,14 @@ export function LoadDataScreen() {
     return draftById[plan.id] ?? plan;
   }, [draftById, selectedScheduleId, todayPlan]);
 
+  const selectedStartDate = selectedSchedule?.startDate ?? null;
+
+  const scrollToCurrentDayRow = useCallback(() => {
+    const y = rowYByDate[progressDayStr];
+    if (typeof y !== "number") return;
+    mainScrollRef.current?.scrollTo({ y: Math.max(0, y - 24), animated: true });
+  }, [progressDayStr, rowYByDate]);
+
   if (loading) {
     return (
       <View style={[g.screenContainer, styles.center]}>
@@ -251,6 +508,9 @@ export function LoadDataScreen() {
   return (
     <View style={g.screenContainer}>
       <ScrollView
+        ref={(r) => {
+          mainScrollRef.current = r;
+        }}
         contentContainerStyle={[
           g.screenContent,
           { paddingBottom: 110 + insets.bottom },
@@ -285,117 +545,9 @@ export function LoadDataScreen() {
                   >
                     <Text style={[styles.progressBtnText, { color: colors.text }]}>{t("loadDataNext")}</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.progressReset} onPress={resetProgressDate}>
-                    <Text style={[styles.progressResetText, { color: colors.primary }]}>{t("loadDataResetProgress")}</Text>
+                  <TouchableOpacity style={styles.progressReset} onPress={scrollToCurrentDayRow}>
+                    <Text style={[styles.progressResetText, { color: colors.primary }]}>{t("loadDataCurrentDay")}</Text>
                   </TouchableOpacity>
-                </View>
-                <View style={styles.rowsWrap}>
-                  <View style={[styles.dayCard, { borderColor: colors.borderLight, backgroundColor: colors.chipSelectedBg }]}>
-                    <View style={styles.fieldsWrap}>
-                      <View style={[styles.field, styles.fieldHalf]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("loadDataColDate")}</Text>
-                        <Text style={[styles.fieldValue, { color: colors.text }]}>{formatDateDisplay(todayRow.date, locale)}</Text>
-                      </View>
-
-                      <View style={[styles.field, styles.fieldHalf]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("loadDataColTime")}</Text>
-                        <TextInput
-                          style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
-                          value={todayRow.time}
-                          onChangeText={(v) => updateDay(todayRow.id, { time: v })}
-                          onBlur={() =>
-                            persistDay(todayRow.id, {
-                              time: (draftById[todayRow.id]?.time ?? todayRow.time).trim(),
-                            })
-                          }
-                          placeholderTextColor={colors.placeholder}
-                        />
-                      </View>
-
-                      <View style={[styles.field, styles.fieldFull]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("loadDataColType")}</Text>
-                        <TextInput
-                          style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
-                          value={todayRow.foodType}
-                          onChangeText={(v) => updateDay(todayRow.id, { foodType: v })}
-                          onBlur={() =>
-                            persistDay(todayRow.id, {
-                              foodType: (draftById[todayRow.id]?.foodType ?? todayRow.foodType).trim(),
-                            })
-                          }
-                          placeholderTextColor={colors.placeholder}
-                        />
-                      </View>
-
-                      <View style={[styles.field, styles.fieldHalf]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
-                          {t("loadDataColAmount")}, {t("loadDataGrams")}
-                        </Text>
-                        <View style={styles.amountRow}>
-                          <TextInput
-                            style={[styles.fieldInput, styles.amountInput, { borderColor: colors.borderLight, color: colors.text }]}
-                            value={amountTextById[todayRow.id] ?? String(todayRow.amountGrams)}
-                            onChangeText={(v) => setAmountTextById((prev) => ({ ...prev, [todayRow.id]: v }))}
-                            onBlur={() => {
-                              const raw = (amountTextById[todayRow.id] ?? String(todayRow.amountGrams)).trim();
-                              const n = parseInt(raw || "0", 10);
-                              if (!isNaN(n) && n >= 0) persistDay(todayRow.id, { amountGrams: n });
-                            }}
-                            keyboardType="numeric"
-                            placeholderTextColor={colors.placeholder}
-                          />
-                        </View>
-                      </View>
-
-                      <View style={[styles.field, styles.fieldFull]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("loadDataColFood")}</Text>
-                        <TextInput
-                          style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
-                          value={todayRow.food}
-                          onChangeText={(v) => updateDay(todayRow.id, { food: v })}
-                          onBlur={() =>
-                            persistDay(todayRow.id, {
-                              food: (draftById[todayRow.id]?.food ?? todayRow.food).trim(),
-                            })
-                          }
-                          placeholderTextColor={colors.placeholder}
-                        />
-                      </View>
-
-                      <View style={[styles.field, styles.fieldFull]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("loadDataColSubs")}</Text>
-                        <TextInput
-                          style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
-                          value={subsTextById[todayRow.id] ?? todayRow.substitutions.join(", ")}
-                          onChangeText={(v) => setSubsTextById((prev) => ({ ...prev, [todayRow.id]: v }))}
-                          onBlur={() => {
-                            const subs = (subsTextById[todayRow.id] ?? todayRow.substitutions.join(", "))
-                              .split(",")
-                              .map((s) => s.trim())
-                              .filter(Boolean);
-                            persistDay(todayRow.id, { substitutions: subs });
-                          }}
-                          placeholderTextColor={colors.placeholder}
-                        />
-                      </View>
-
-                      <View style={[styles.field, styles.fieldFull]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("loadDataColNotes")}</Text>
-                        <TextInput
-                          style={[styles.fieldInput, styles.fieldMultiline, { borderColor: colors.borderLight, color: colors.text }]}
-                          value={todayRow.notes ?? ""}
-                          onChangeText={(v) => updateDay(todayRow.id, { notes: v || undefined })}
-                          onBlur={() =>
-                            persistDay(todayRow.id, {
-                              notes: (draftById[todayRow.id]?.notes ?? todayRow.notes) || undefined,
-                            })
-                          }
-                          placeholderTextColor={colors.placeholder}
-                          multiline
-                        />
-                      </View>
-                    </View>
-                  </View>
                 </View>
               </View>
             ) : null}
@@ -439,15 +591,26 @@ export function LoadDataScreen() {
                       { borderColor: colors.borderLight, backgroundColor: colors.card },
                       isProgress && { backgroundColor: colors.chipSelectedBg },
                     ]}
+                    onLayout={(e) => {
+                      const y = e.nativeEvent.layout.y;
+                      setRowYByDate((prev) => (prev[d.date] === y ? prev : { ...prev, [d.date]: y }));
+                    }}
                   >
-                    <TouchableOpacity onPress={() => setProgressDate(d.date)} style={styles.dayCardHeader}>
+                    <View style={styles.dayCardHeader}>
                       <Text style={[styles.dayCardDate, { color: colors.text }]}>
-                        {formatDateDisplay(d.date, locale)}
+                        {selectedStartDate ? `${t("loadDataDay")} ${dayIndexFromStart(selectedStartDate, d.date)}` : formatDateDisplay(d.date, locale)}
                       </Text>
                       {isProgress ? (
                         <Text style={[styles.dayCardBadge, { color: colors.primary }]}>{t("loadDataCurrentDay")}</Text>
-                      ) : null}
-                    </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          style={[styles.setCurrentBtn, { borderColor: colors.borderLight, backgroundColor: colors.card }]}
+                          onPress={() => setProgressDate(d.date)}
+                        >
+                          <Text style={[styles.setCurrentBtnText, { color: colors.primary }]}>{t("loadDataCurrentDay")}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
 
                     <View style={styles.fieldsWrap}>
                       <View style={[styles.field, styles.fieldHalf]}>
@@ -557,8 +720,8 @@ export function LoadDataScreen() {
               {amountInvalidCount ? `· ${t("loadDataInvalidCells", { count: amountInvalidCount })}` : ""}
             </Text>
             <TouchableOpacity
-              style={[g.buttonFull, (!dirty || amountInvalidCount > 0) && g.buttonDisabled]}
-              disabled={!dirty || amountInvalidCount > 0 || !selectedSchedule}
+              style={[g.buttonFull, !selectedSchedule && g.buttonDisabled]}
+              disabled={!selectedSchedule}
               onPress={openPayloadPreview}
             >
               <Text style={g.buttonFullText}>{t("loadDataSendToGithub")}</Text>
@@ -578,7 +741,23 @@ export function LoadDataScreen() {
               multiline
               textAlignVertical="top"
             />
+            <TextInput
+              style={[g.input, styles.githubResultBox, { color: colors.text }]}
+              value={githubResultText}
+              editable={false}
+              multiline
+              textAlignVertical="top"
+              placeholder="Result will appear here…"
+              placeholderTextColor={colors.placeholder}
+            />
             <View style={g.modalButtons}>
+              <TouchableOpacity
+                style={[g.saveBtn, (githubSending || !dirty || amountInvalidCount > 0) && g.buttonDisabled]}
+                disabled={githubSending || !dirty || amountInvalidCount > 0}
+                onPress={sendToGithub}
+              >
+                <Text style={g.saveBtnText}>{githubSending ? "Sending..." : "Send"}</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={g.saveBtn} onPress={() => setPayloadModalVisible(false)}>
                 <Text style={g.saveBtnText}>{t("loadDataClose")}</Text>
               </TouchableOpacity>
@@ -690,6 +869,16 @@ function useLocalStyles(colors: {
           fontSize: 13,
           fontFamily: fonts.medium,
         },
+        setCurrentBtn: {
+          borderWidth: 1,
+          borderRadius: spacing.radiusMd,
+          paddingVertical: 6,
+          paddingHorizontal: 10,
+        },
+        setCurrentBtnText: {
+          fontSize: 13,
+          fontFamily: fonts.medium,
+        },
         fieldsWrap: {
           flexDirection: "row",
           flexWrap: "wrap",
@@ -774,6 +963,12 @@ function useLocalStyles(colors: {
         },
         payloadText: {
           height: 320,
+          fontSize: 12,
+          fontFamily: fonts.regular,
+        },
+        githubResultBox: {
+          height: 120,
+          marginTop: 10,
           fontSize: 12,
           fontFamily: fonts.regular,
         },
