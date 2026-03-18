@@ -16,10 +16,12 @@ import { MainScreen } from "./src/screens/MainScreen";
 import { StatisticsScreen } from "./src/screens/StatisticsScreen";
 import { LoadDataScreen } from "./src/screens/LoadDataScreen";
 import { CalculatorScreen } from "./src/screens/CalculatorScreen";
+import { RemoteFeedScreen } from "./src/screens/RemoteFeedScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ThemeProvider, useTheme } from "./src/contexts/ThemeContext";
 import { LocaleProvider, useLocale } from "./src/contexts/LocaleContext";
 import { PreferencesProvider } from "./src/contexts/PreferencesContext";
+import { RemoteFeedProvider } from "./src/remoteFeed/RemoteFeedContext";
 import { fonts } from "./src/theme";
 import type { RootTabParamList } from "./src/navigation/types";
 import type { TranslationKey } from "./src/i18n/en";
@@ -50,6 +52,12 @@ const TAB_CONFIG: {
     labelKey: "tabsCalc",
     titleKey: "screenTitlesCalculator",
     component: CalculatorScreen,
+  },
+  {
+    name: "RemoteFeed",
+    labelKey: "tabsRemote",
+    titleKey: "screenTitlesRemoteFeed",
+    component: RemoteFeedScreen,
   },
   {
     name: "Settings",
@@ -144,9 +152,11 @@ export default function App() {
       <LocaleProvider>
         <ThemeProvider>
           <PreferencesProvider>
-          <NavigationContainer>
-            <AppTabs />
-          </NavigationContainer>
+            <RemoteFeedProvider>
+              <NavigationContainer>
+                <AppTabs />
+              </NavigationContainer>
+            </RemoteFeedProvider>
           </PreferencesProvider>
         </ThemeProvider>
       </LocaleProvider>

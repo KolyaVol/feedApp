@@ -37,6 +37,8 @@ export function LoadDataScreen() {
     updatePlanDay,
   } = useSchedule();
 
+  const localSchedules = schedules.filter((s) => s.id !== "remote");
+
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingDay, setEditingDay] = useState<PlanDay | null>(null);
   const [editFood, setEditFood] = useState("");
@@ -152,12 +154,12 @@ export function LoadDataScreen() {
           <Text style={g.primaryButtonOutlineText}>{t("loadDataPasteJson")}</Text>
         </TouchableOpacity>
 
-        {schedules.length === 0 ? (
+        {localSchedules.length === 0 ? (
           <View style={g.emptyBox}>
             <Text style={g.emptyText}>{t("loadDataEmpty")}</Text>
           </View>
         ) : (
-          schedules.map((schedule) => {
+          localSchedules.map((schedule) => {
             const isExpanded = expandedId === schedule.id;
             const days = isExpanded ? getDaysForSchedule(schedule.id) : [];
             return (

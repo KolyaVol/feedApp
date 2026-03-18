@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PlanDay, LoadedSchedule } from "../types";
 import {
   getPlanDays,
@@ -16,6 +16,10 @@ import {
   deleteLoadedSchedule as deleteScheduleStorage,
 } from "../data/loadedSchedules";
 import { generateId } from "../utils/id";
+import { useRemoteFeedContext } from "../remoteFeed/RemoteFeedContext";
+import {
+  remoteScheduleToPlanDays,
+} from "../remoteFeed/deriveToday";
 
 interface ScheduleJson {
   month: number;
@@ -36,9 +40,39 @@ interface ScheduleJson {
 }
 
 export function useSchedule() {
+  const remote = useRemoteFeedContext();
   const [planDays, setPlanDaysState] = useState<PlanDay[]>([]);
   const [schedules, setSchedules] = useState<LoadedSchedule[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const remotePlanDays = useMemo((): PlanDay[] => {
+    if (!remote?.schedule || !remote.startDate) return [];
+    return remoteScheduleToPlanDays(remote.schedule, remote.startDate);
+  }, [remote?.schedule, remote?.startDate]);
+
+  const remoteLoadedSchedule = useMemo((): LoadedSchedule | null => {
+    if (!remote?.schedule || !remote.startDate || !remotePlanDays.length) return null;
+    const startDate = remote.startDate;
+    const endDate = remotePlanDays[remotePlanDays.length - 1]?.date ?? startDate;
+    return {
+      id: "remote",
+      month: remote.schedule.month,
+      startDate,
+      endDate,
+      signsOfReadiness: remote.schedule.signs_of_readiness ?? [],
+      safetyGuidelines: remote.schedule.safety_guidelines ?? [],
+      loadedAt: "",
+    };
+  }, [remote?.schedule, remote?.startDate, remotePlanDays]);
+
+  const effectivePlanDays = useMemo(() => {
+    return [...remotePlanDays, ...planDays];
+  }, [remotePlanDays, planDays]);
+
+  const effectiveSchedules = useMemo(() => {
+    const list = remoteLoadedSchedule ? [remoteLoadedSchedule, ...schedules] : schedules;
+    return list;
+  }, [remoteLoadedSchedule, schedules]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -57,19 +91,19 @@ export function useSchedule() {
 
   const todayPlan = useCallback((): PlanDay | undefined => {
     const today = formatDateStr(new Date());
-    return getPlanDayForDate(planDays, today);
-  }, [planDays]);
+    return getPlanDayForDate(effectivePlanDays, today);
+  }, [effectivePlanDays]);
 
   const tomorrowPlan = useCallback((): PlanDay | undefined => {
     const tomorrow = addDays(formatDateStr(new Date()), 1);
-    return getPlanDayForDate(planDays, tomorrow);
-  }, [planDays]);
+    return getPlanDayForDate(effectivePlanDays, tomorrow);
+  }, [effectivePlanDays]);
 
   const getScheduleForDay = useCallback(
     (day: PlanDay): LoadedSchedule | undefined => {
-      return schedules.find((s) => s.id === day.scheduleId);
+      return effectiveSchedules.find((s) => s.id === day.scheduleId);
     },
-    [schedules],
+    [effectiveSchedules],
   );
 
   const loadJson = useCallback(
@@ -152,22 +186,22 @@ export function useSchedule() {
 
   const getDaysForSchedule = useCallback(
     (scheduleId: string): PlanDay[] => {
-      return planDays
+      return effectivePlanDays
         .filter((d) => d.scheduleId === scheduleId)
         .sort((a, b) => a.date.localeCompare(b.date));
     },
-    [planDays],
+    [effectivePlanDays],
   );
 
   const getRandomSafetyTip = useCallback((): string | undefined => {
-    const allTips = schedules.flatMap((s) => s.safetyGuidelines);
+    const allTips = effectiveSchedules.flatMap((s) => s.safetyGuidelines);
     if (!allTips.length) return undefined;
     return allTips[Math.floor(Math.random() * allTips.length)];
-  }, [schedules]);
+  }, [effectiveSchedules]);
 
   return {
-    planDays,
-    schedules,
+    planDays: effectivePlanDays,
+    schedules: effectiveSchedules,
     loading,
     refresh,
     todayPlan,

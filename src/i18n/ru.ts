@@ -116,6 +116,7 @@ export const ru: Record<TranslationKey, string> = {
   tabsData: "Данные",
   tabsCalc: "Корзина",
   tabsReminders: "Напоминания",
+  tabsRemote: "GitHub",
   tabsSettings: "Настройки",
 
   screenTitlesBabyFeed: "Кормление",
@@ -123,4 +124,5 @@ export const ru: Record<TranslationKey, string> = {
   screenTitlesFoodTypes: "Типы питания",
   screenTitlesLoadData: "Загрузка данных",
   screenTitlesCalculator: "Калькулятор покупок",
+  screenTitlesRemoteFeed: "GitHub данные",
 };

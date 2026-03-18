@@ -3,6 +3,7 @@ export type RootTabParamList = {
   Stats: undefined;
   LoadData: undefined;
   Calculator: undefined;
+  RemoteFeed: undefined;
   Settings: undefined;
 };
 

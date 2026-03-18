@@ -114,6 +114,7 @@ export const en = {
   tabsData: "Data",
   tabsCalc: "Cart",
   tabsReminders: "Reminders",
+  tabsRemote: "Remote",
   tabsSettings: "Settings",
 
   screenTitlesBabyFeed: "Baby Feed",
@@ -121,6 +122,7 @@ export const en = {
   screenTitlesFoodTypes: "Food types",
   screenTitlesLoadData: "Load Data",
   screenTitlesCalculator: "Shopping Calculator",
+  screenTitlesRemoteFeed: "Remote feed",
 } as const;
 
 export type TranslationKey = keyof typeof en;
