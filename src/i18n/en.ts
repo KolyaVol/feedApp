@@ -24,6 +24,9 @@ export const en = {
   mainNotes: "Notes",
   mainSafetyTip: "Safety tip",
   mainDaysRemainingAlert: "Current loaded data: {{count}} days remaining",
+  mainChangeAllDaysTimeTitle: "Change time for all days",
+  mainChangeAllDaysTimeLabel: "Time",
+  mainChangeAllDaysTimeSave: "Save",
 
   foodTypesScreenTitle: "Food types",
   foodTypesAddNewVariant: "+ Add new variant",
@@ -114,6 +117,9 @@ export const en = {
   calcAlternatives: "Alternatives",
   calcPackageSize: "Package size",
   calcPackagesNeeded: "Buy",
+  calcMonth: "Month",
+  calcPrevMonth: "Prev",
+  calcNextMonth: "Next",
 
   statsScreenTitle: "Statistics",
   statsDaily: "Daily",

@@ -5,9 +5,13 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  Modal,
+  TouchableOpacity,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useSchedule } from "../hooks/useSchedule";
 import { scheduleDailyPlanNotification } from "../notifications/schedule";
 import { fonts, spacing } from "../theme";
@@ -15,6 +19,7 @@ import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLocale } from "../contexts/LocaleContext";
 import { usePreferences } from "../contexts/PreferencesContext";
+import { dateToTime, timeToDate } from "../utils/date";
 
 export function MainScreen() {
   const insets = useSafeAreaInsets();
@@ -30,10 +35,14 @@ export function MainScreen() {
     todayPlan,
     getScheduleForDay,
     progressDateStr,
+    updateAllPlanDaysTime,
   } = useSchedule();
 
   const tipPickedRef = useRef(false);
   const [safetyTip, setSafetyTip] = React.useState<string | undefined>();
+  const [changeTimeModalVisible, setChangeTimeModalVisible] = React.useState(false);
+  const [changeTimeValue, setChangeTimeValue] = React.useState(() => new Date());
+  const [showTimePicker, setShowTimePicker] = React.useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -92,6 +101,21 @@ export function MainScreen() {
     if (days <= 5) return { level: "orange" as const, days };
     return { level: "yellow" as const, days };
   }, [schedule?.endDate, progressDateStr]);
+
+  const openChangeAllDaysTime = useCallback(() => {
+    if (!plan) return;
+    setChangeTimeValue(timeToDate(plan.time));
+    setShowTimePicker(Platform.OS === "ios");
+    setChangeTimeModalVisible(true);
+  }, [plan]);
+
+  const saveAllDaysTime = useCallback(async () => {
+    const time = dateToTime(changeTimeValue);
+    await updateAllPlanDaysTime(time);
+    await scheduleDailyPlanNotification();
+    setChangeTimeModalVisible(false);
+    setShowTimePicker(false);
+  }, [changeTimeValue, updateAllPlanDaysTime]);
 
   if (loading) {
     return (
@@ -156,7 +180,9 @@ export function MainScreen() {
             </Text>
           </View>
           <View style={styles.detailBadge}>
-            <Text style={styles.detailBadgeText}>⏰ {plan.time}</Text>
+            <TouchableOpacity onPress={openChangeAllDaysTime}>
+              <Text style={styles.detailBadgeText}>⏰ {plan.time}</Text>
+            </TouchableOpacity>
           </View>
           <View style={styles.detailBadge}>
             <Text style={styles.detailBadgeText}>
@@ -196,6 +222,47 @@ export function MainScreen() {
           </View>
         </View>
       ) : null}
+      <Modal visible={changeTimeModalVisible} animationType="slide" transparent>
+        <View style={g.modalOverlay}>
+          <View style={g.modal}>
+            <Text style={g.modalTitle}>{t("mainChangeAllDaysTimeTitle")}</Text>
+            <TouchableOpacity
+              style={styles.timeRow}
+              onPress={() => setShowTimePicker(true)}
+            >
+              <Text style={[g.labelMuted, styles.timeLabel]}>
+                {t("mainChangeAllDaysTimeLabel")}
+              </Text>
+              <Text style={g.textBody}>{dateToTime(changeTimeValue)}</Text>
+            </TouchableOpacity>
+            {showTimePicker && (
+              <DateTimePicker
+                value={changeTimeValue}
+                mode="time"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                onChange={(_, d) => {
+                  if (d) setChangeTimeValue(d);
+                  setShowTimePicker(Platform.OS === "ios");
+                }}
+              />
+            )}
+            <View style={g.modalButtons}>
+              <TouchableOpacity
+                style={g.cancelBtn}
+                onPress={() => {
+                  setChangeTimeModalVisible(false);
+                  setShowTimePicker(false);
+                }}
+              >
+                <Text style={g.cancelBtnText}>{t("remindersCancel")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={g.saveBtn} onPress={saveAllDaysTime}>
+                <Text style={g.saveBtnText}>{t("mainChangeAllDaysTimeSave")}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -278,6 +345,12 @@ function useLocalStyles(colors: {
           color: colors.text,
           fontFamily: fonts.medium,
         },
+        timeRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          marginBottom: 20,
+        },
+        timeLabel: { marginRight: 12 },
         section: {
           marginHorizontal: spacing.screenPadding,
           marginBottom: 16,

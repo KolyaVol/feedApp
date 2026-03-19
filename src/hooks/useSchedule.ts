@@ -7,6 +7,7 @@ import {
   setPlanDays,
   addPlanDays,
   updatePlanDay as updatePlanDayStorage,
+  updateAllPlanDaysTime as updateAllPlanDaysTimeStorage,
   deletePlanDaysBySchedule,
   getPlanDayForDate,
   formatDateStr,
@@ -222,6 +223,14 @@ export function useSchedule() {
     [refresh],
   );
 
+  const updateAllPlanDaysTime = useCallback(
+    async (time: string): Promise<void> => {
+      await updateAllPlanDaysTimeStorage(time);
+      await refresh();
+    },
+    [refresh],
+  );
+
   const getDaysForSchedule = useCallback(
     (scheduleId: string): PlanDay[] => {
       const seenByDate = new Set<string>();
@@ -257,6 +266,7 @@ export function useSchedule() {
     loadJson,
     deleteSchedule,
     updatePlanDay,
+    updateAllPlanDaysTime,
     getDaysForSchedule,
     getRandomSafetyTip,
   };

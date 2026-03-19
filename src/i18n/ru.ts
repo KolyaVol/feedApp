@@ -26,6 +26,9 @@ export const ru: Record<TranslationKey, string> = {
   mainNotes: "Заметки",
   mainSafetyTip: "Совет по безопасности",
   mainDaysRemainingAlert: "Текущие загруженные данные: осталось {{count}} дней",
+  mainChangeAllDaysTimeTitle: "Изменить время для всех дней",
+  mainChangeAllDaysTimeLabel: "Время",
+  mainChangeAllDaysTimeSave: "Сохранить",
 
   foodTypesScreenTitle: "Типы питания",
   foodTypesAddNewVariant: "+ Добавить вариант",
@@ -116,6 +119,9 @@ export const ru: Record<TranslationKey, string> = {
   calcAlternatives: "Замены",
   calcPackageSize: "Масса упаковки",
   calcPackagesNeeded: "Купить",
+  calcMonth: "Месяц",
+  calcPrevMonth: "Назад",
+  calcNextMonth: "Вперед",
 
   statsScreenTitle: "Статистика",
   statsDaily: "День",

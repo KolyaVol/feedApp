@@ -214,6 +214,11 @@ async function putGithubContents(opts: {
   return { commitSha, commitUrl };
 }
 
+function isGithubConflictError(error: unknown): boolean {
+  const msg = String((error as any)?.message ?? error ?? "");
+  return /\(409\)|\b409\b|Conflict/i.test(msg);
+}
+
 function buildScheduleJson(schedule: LoadedSchedule, days: PlanDay[]): ScheduleJson {
   const weekly = new Map<number, PlanDay[]>();
   for (const d of days) {
@@ -432,7 +437,7 @@ export function LoadDataScreen() {
             ? `${changes.length} days updated`
             : "Update";
       const message = `${summary} (${path})`;
-      const put = await putGithubContents({
+      let put = await putGithubContents({
         apiBase,
         owner,
         repo,
@@ -442,6 +447,20 @@ export function LoadDataScreen() {
         message,
         contentBase64,
         sha: notFound ? undefined : sha,
+      }).catch(async (error) => {
+        if (!isGithubConflictError(error)) throw error;
+        const latest = await readGithubContentsSha({ apiBase, owner, repo, branch, path, token });
+        return putGithubContents({
+          apiBase,
+          owner,
+          repo,
+          branch,
+          path,
+          token,
+          message,
+          contentBase64,
+          sha: latest.notFound ? undefined : latest.sha,
+        });
       });
       const text = [
         t("loadDataSendSuccess"),

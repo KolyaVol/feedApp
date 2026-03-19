@@ -3,6 +3,7 @@ import { fetchRemoteJson } from "./api";
 import { loadCachedJson, loadStartDate, saveCachedJson } from "./storage";
 import { getTodayFromSchedule } from "./deriveToday";
 import { scheduleMealsFromFeedData } from "./notifications";
+import { isScheduleValid, shouldRejectFreshInFavorOfCache } from "./validate";
 import { REMOTE_FEED_URL } from "./config";
 import type { RemoteFeedSchedule, RemoteFeedToday } from "./types";
 
@@ -18,10 +19,18 @@ export function useRemoteFeed(url: string = REMOTE_FEED_URL) {
     return getTodayFromSchedule(schedule, startDate);
   }, [schedule, startDate]);
 
-  const fetchAndUpdate = useCallback(async (sd: string | null) => {
+  const fetchAndUpdate = useCallback(async (sd: string | null, cachedSchedule: RemoteFeedSchedule | null) => {
     const fresh = await fetchRemoteJson(url);
     if (!fresh) {
       setError((e) => e ?? "Failed to fetch remote JSON");
+      return;
+    }
+    if (!isScheduleValid(fresh)) {
+      setError("Remote data invalid, using cache");
+      return;
+    }
+    if (shouldRejectFreshInFavorOfCache(fresh, cachedSchedule)) {
+      setError("Remote data invalid, using cache");
       return;
     }
     await saveCachedJson(fresh);
@@ -41,7 +50,7 @@ export function useRemoteFeed(url: string = REMOTE_FEED_URL) {
         setSchedule(cached);
         setStartDate(sd);
         setLoading(false);
-        await fetchAndUpdate(sd);
+        await fetchAndUpdate(sd, cached);
       } catch {
         if (cancelled) return;
         setLoading(false);
@@ -55,11 +64,11 @@ export function useRemoteFeed(url: string = REMOTE_FEED_URL) {
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await fetchAndUpdate(startDate);
+      await fetchAndUpdate(startDate, schedule);
     } finally {
       setRefreshing(false);
     }
-  }, [fetchAndUpdate, startDate]);
+  }, [fetchAndUpdate, startDate, schedule]);
 
   return { schedule, startDate, today, loading, refreshing, error, refresh };
 }

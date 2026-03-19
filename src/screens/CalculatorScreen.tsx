@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TextInput,
   StyleSheet,
   ActivityIndicator,
+  TouchableOpacity,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
@@ -15,6 +16,7 @@ import { useTheme } from "../contexts/ThemeContext";
 import { useLocale } from "../contexts/LocaleContext";
 import { usePreferences } from "../contexts/PreferencesContext";
 import { fonts, spacing } from "../theme";
+import type { LoadedSchedule } from "../types";
 
 interface FoodSummary {
   food: string;
@@ -30,8 +32,9 @@ export function CalculatorScreen() {
   const { colors } = useTheme();
   const { hideSubstitutions } = usePreferences();
   const styles = useLocalStyles(colors);
-  const { planDays, loading, refresh } = useSchedule();
+  const { planDays, schedules, loading, refresh } = useSchedule();
   const [packageSizes, setPackageSizes] = useState<Record<string, string>>({});
+  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -39,12 +42,38 @@ export function CalculatorScreen() {
     }, [refresh]),
   );
 
+  const sortedSchedules = useMemo<LoadedSchedule[]>(() => {
+    return [...schedules].sort((a, b) => a.startDate.localeCompare(b.startDate));
+  }, [schedules]);
+
+  useEffect(() => {
+    if (selectedScheduleId && sortedSchedules.some((s) => s.id === selectedScheduleId)) {
+      return;
+    }
+    setSelectedScheduleId(sortedSchedules[sortedSchedules.length - 1]?.id ?? null);
+  }, [selectedScheduleId, sortedSchedules]);
+
+  const selectedScheduleIndex = useMemo(() => {
+    if (!selectedScheduleId) return -1;
+    return sortedSchedules.findIndex((s) => s.id === selectedScheduleId);
+  }, [selectedScheduleId, sortedSchedules]);
+
+  const selectedSchedule = selectedScheduleIndex >= 0 ? sortedSchedules[selectedScheduleIndex] : null;
+  const canGoPrev = selectedScheduleIndex > 0;
+  const canGoNext =
+    selectedScheduleIndex >= 0 && selectedScheduleIndex < sortedSchedules.length - 1;
+
+  const visiblePlanDays = useMemo(() => {
+    if (!selectedSchedule) return planDays;
+    return planDays.filter((day) => day.scheduleId === selectedSchedule.id);
+  }, [planDays, selectedSchedule]);
+
   const foods: FoodSummary[] = useMemo(() => {
     const map: Record<
       string,
       { foodType: string; totalGrams: number; subs: Set<string> }
     > = {};
-    for (const d of planDays) {
+    for (const d of visiblePlanDays) {
       const key = d.food.toLowerCase();
       if (!map[key]) {
         map[key] = { foodType: d.foodType, totalGrams: 0, subs: new Set() };
@@ -62,7 +91,17 @@ export function CalculatorScreen() {
         substitutions: Array.from(subs),
       }))
       .sort((a, b) => b.totalGrams - a.totalGrams);
-  }, [planDays]);
+  }, [visiblePlanDays]);
+
+  const goPrevMonth = useCallback(() => {
+    if (!canGoPrev || selectedScheduleIndex < 1) return;
+    setSelectedScheduleId(sortedSchedules[selectedScheduleIndex - 1].id);
+  }, [canGoPrev, selectedScheduleIndex, sortedSchedules]);
+
+  const goNextMonth = useCallback(() => {
+    if (!canGoNext || selectedScheduleIndex < 0) return;
+    setSelectedScheduleId(sortedSchedules[selectedScheduleIndex + 1].id);
+  }, [canGoNext, selectedScheduleIndex, sortedSchedules]);
 
   const setSize = (food: string, value: string) => {
     setPackageSizes((prev) => ({ ...prev, [food]: value }));
@@ -84,6 +123,27 @@ export function CalculatorScreen() {
       <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>
         {t("calcTitle")}
       </Text>
+      {selectedSchedule ? (
+        <View style={styles.monthSwitcher}>
+          <TouchableOpacity
+            style={[styles.monthSwitchBtn, !canGoPrev && styles.monthSwitchBtnDisabled]}
+            onPress={goPrevMonth}
+            disabled={!canGoPrev}
+          >
+            <Text style={styles.monthSwitchBtnText}>{t("calcPrevMonth")}</Text>
+          </TouchableOpacity>
+          <Text style={styles.monthLabel}>
+            {t("calcMonth")} {selectedSchedule.month}
+          </Text>
+          <TouchableOpacity
+            style={[styles.monthSwitchBtn, !canGoNext && styles.monthSwitchBtnDisabled]}
+            onPress={goNextMonth}
+            disabled={!canGoNext}
+          >
+            <Text style={styles.monthSwitchBtnText}>{t("calcNextMonth")}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {foods.length === 0 ? (
         <View style={g.emptyBox}>
@@ -169,6 +229,35 @@ function useLocalStyles(colors: {
     () =>
       StyleSheet.create({
         center: { flex: 1, justifyContent: "center", alignItems: "center" },
+        monthSwitcher: {
+          marginHorizontal: spacing.screenPadding,
+          marginBottom: 12,
+          backgroundColor: colors.card,
+          borderRadius: spacing.radiusMd,
+          padding: 10,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        },
+        monthSwitchBtn: {
+          paddingVertical: 6,
+          paddingHorizontal: 10,
+          borderRadius: spacing.radiusChip,
+          backgroundColor: colors.chipBg,
+        },
+        monthSwitchBtnDisabled: {
+          opacity: 0.5,
+        },
+        monthSwitchBtnText: {
+          fontSize: 13,
+          color: colors.text,
+          fontFamily: fonts.medium,
+        },
+        monthLabel: {
+          fontSize: 14,
+          color: colors.text,
+          fontFamily: fonts.semiBold,
+        },
         card: {
           marginHorizontal: spacing.screenPadding,
           marginBottom: 12,

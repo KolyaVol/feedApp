@@ -19,6 +19,11 @@ export async function updatePlanDay(
   return planDaysStorage.updateItem(id, updates);
 }
 
+export async function updateAllPlanDaysTime(time: string): Promise<void> {
+  const all = await getPlanDays();
+  await setPlanDays(all.map((d) => ({ ...d, time })));
+}
+
 export async function deletePlanDaysBySchedule(
   scheduleId: string,
 ): Promise<void> {
