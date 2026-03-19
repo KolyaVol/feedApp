@@ -17,6 +17,7 @@ import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLocale } from "../contexts/LocaleContext";
 import { usePreferences } from "../contexts/PreferencesContext";
+import { useRemoteFeedContext } from "../remoteFeed/RemoteFeedContext";
 import { fonts, spacing } from "../theme";
 import type { LoadedSchedule, PlanDay } from "../types";
 import { addDays, addPlanDays, formatDateStr, updatePlanDay as updatePlanDayStorage } from "../data/planDays";
@@ -259,6 +260,7 @@ export function LoadDataScreen() {
   const t = tRaw as (key: string, params?: Record<string, string | number>) => string;
   const { colors } = useTheme();
   const { isDeveloper } = usePreferences();
+  const remote = useRemoteFeedContext();
   const styles = useLocalStyles(colors);
 
   const { schedules, loading, refresh, getDaysForSchedule, todayPlan, progressDateStr, setProgressDate } = useSchedule();
@@ -475,11 +477,21 @@ export function LoadDataScreen() {
     }
   }, [amountInvalidCount, amountTextById, dirty, draftById, draftJsonText, originalById, selectedSchedule, subsTextById, t]);
 
+  const refreshAfterSuccessfulSend = useCallback(async () => {
+    await Promise.all([
+      refresh(),
+      remote?.refresh ? remote.refresh() : Promise.resolve(),
+    ]);
+  }, [refresh, remote]);
+
   const sendToGithub = useCallback(async () => {
     if (!selectedSchedule) return;
     setGithubSending(true);
     setGithubResultText("Sending...");
     const result = await performGithubSend();
+    if (result.ok) {
+      await refreshAfterSuccessfulSend();
+    }
     setGithubResultText(result.text);
     if (!isDeveloper) {
       setToast({
@@ -488,7 +500,7 @@ export function LoadDataScreen() {
       });
     }
     setGithubSending(false);
-  }, [isDeveloper, performGithubSend, selectedSchedule, t]);
+  }, [isDeveloper, performGithubSend, refreshAfterSuccessfulSend, selectedSchedule, t]);
 
   const onPressSendData = useCallback(async () => {
     if (isDeveloper) {
@@ -498,12 +510,15 @@ export function LoadDataScreen() {
     if (!selectedSchedule) return;
     setGithubSending(true);
     const result = await performGithubSend();
+    if (result.ok) {
+      await refreshAfterSuccessfulSend();
+    }
     setGithubSending(false);
     setToast({
       kind: result.ok ? "success" : "error",
       text: result.ok ? t("loadDataSendSuccess") : `${t("loadDataSendError")}: ${result.text}`,
     });
-  }, [isDeveloper, openPayloadPreview, performGithubSend, selectedSchedule, t]);
+  }, [isDeveloper, openPayloadPreview, performGithubSend, refreshAfterSuccessfulSend, selectedSchedule, t]);
 
   useEffect(() => {
     if (!toast) return;
@@ -544,6 +559,7 @@ export function LoadDataScreen() {
     selectedSchedule &&
     progressDayStr >= selectedSchedule.startDate &&
     progressDayStr <= selectedSchedule.endDate;
+  const isFirstDay = selectedSchedule && progressDayStr === selectedSchedule.startDate;
   const isLastDay = selectedSchedule && progressDayStr === selectedSchedule.endDate;
 
   const scrollToCurrentDayRow = useCallback(() => {
@@ -586,8 +602,9 @@ export function LoadDataScreen() {
                 </Text>
                 <View style={styles.progressControls}>
                   <TouchableOpacity
-                    style={[styles.progressBtn, { borderColor: colors.borderLight }]}
-                    onPress={() => setProgressDate(addDays(progressDayStr, -1))}
+                    style={[styles.progressBtn, { borderColor: colors.borderLight }, isFirstDay && g.buttonDisabled]}
+                    disabled={!!isFirstDay}
+                    onPress={() => !isFirstDay && setProgressDate(addDays(progressDayStr, -1))}
                   >
                     <Text style={[styles.progressBtnText, { color: colors.text }]}>{t("loadDataPrev")}</Text>
                   </TouchableOpacity>
