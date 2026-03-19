@@ -141,7 +141,7 @@ export function MainScreen() {
           ]}
         >
           <Text style={[styles.updateDataAlertText, { color: colors.text }]}>
-            {t("loadDataUpdateDataAlert")}
+            {t("mainDaysRemainingAlert", { count: Math.max(0, daysRemainingAlert.days) })}
           </Text>
         </View>
       ) : null}

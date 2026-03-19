@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import type { PlanDay, LoadedSchedule } from "../types";
 import {
   getPlanDays,
@@ -58,6 +59,19 @@ export function useSchedule() {
       setProgressDateStr(toUse);
     });
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      AsyncStorage.getItem(KEYS.PROGRESS_DATE).then((stored) => {
+        const realToday = formatDateStr(new Date());
+        const validStored = stored && /^\d{4}-\d{2}-\d{2}$/.test(stored);
+        const toUse =
+          validStored && stored >= realToday ? stored : realToday;
+        if (toUse !== stored) AsyncStorage.setItem(KEYS.PROGRESS_DATE, toUse);
+        setProgressDateStr(toUse);
+      });
+    }, []),
+  );
 
   const setProgressDate = useCallback((dateStr: string) => {
     setProgressDateStr(dateStr);

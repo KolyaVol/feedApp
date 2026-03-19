@@ -11,10 +11,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
+import { BlurView } from "expo-blur";
 import { useSchedule } from "../hooks/useSchedule";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLocale } from "../contexts/LocaleContext";
+import { usePreferences } from "../contexts/PreferencesContext";
 import { fonts, spacing } from "../theme";
 import type { LoadedSchedule, PlanDay } from "../types";
 import { addDays, addPlanDays, formatDateStr, updatePlanDay as updatePlanDayStorage } from "../data/planDays";
@@ -251,6 +253,7 @@ export function LoadDataScreen() {
   const { t: tRaw, locale } = useLocale();
   const t = tRaw as (key: string, params?: Record<string, string | number>) => string;
   const { colors } = useTheme();
+  const { isDeveloper } = usePreferences();
   const styles = useLocalStyles(colors);
 
   const { schedules, loading, refresh, getDaysForSchedule, todayPlan, progressDateStr, setProgressDate } = useSchedule();
@@ -273,8 +276,12 @@ export function LoadDataScreen() {
   const [payloadText, setPayloadText] = useState("");
   const [githubSending, setGithubSending] = useState(false);
   const [githubResultText, setGithubResultText] = useState<string>("");
+  const [toast, setToast] = useState<{ kind: "success" | "error"; text: string } | null>(null);
 
   const progressDayStr = progressDateStr;
+  const isDarkUi = colors.background === "#1a1a1a";
+  const glassBg = isDarkUi ? "rgba(45,45,45,0.65)" : "rgba(255,255,255,0.72)";
+  const glassBorder = isDarkUi ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.8)";
 
   useFocusEffect(
     useCallback(() => {
@@ -385,17 +392,10 @@ export function LoadDataScreen() {
     setPayloadModalVisible(true);
   }, [draftJsonText, selectedSchedule]);
 
-  const sendToGithub = useCallback(async () => {
-    if (!selectedSchedule) return;
-
-    if (!dirty) {
-      setGithubResultText("No changes to send.");
-      return;
-    }
-    if (amountInvalidCount > 0) {
-      setGithubResultText("Fix invalid amount cells before sending.");
-      return;
-    }
+  const performGithubSend = useCallback(async (): Promise<{ ok: boolean; text: string }> => {
+    if (!selectedSchedule) return { ok: false, text: "No schedule selected." };
+    if (!dirty) return { ok: false, text: "No changes to send." };
+    if (amountInvalidCount > 0) return { ok: false, text: "Fix invalid amount cells before sending." };
 
     const token = readEnv("EXPO_PUBLIC_GITHUB_TOKEN") ?? readEnv("GITHUB_TOKEN");
     const owner = readEnv("EXPO_PUBLIC_GITHUB_OWNER") ?? readEnv("GITHUB_OWNER");
@@ -405,23 +405,21 @@ export function LoadDataScreen() {
     const apiBase = readEnv("EXPO_PUBLIC_GITHUB_API_BASE") ?? readEnv("GITHUB_API_BASE") ?? "https://api.github.com";
 
     if (!token || !owner || !repo) {
-      setGithubResultText(
-        `Missing env.\n` +
+      return {
+        ok: false,
+        text:
+          `Missing env.\n` +
           `Need: EXPO_PUBLIC_GITHUB_TOKEN, EXPO_PUBLIC_GITHUB_OWNER, EXPO_PUBLIC_GITHUB_REPO\n` +
           `Optional: EXPO_PUBLIC_GITHUB_BRANCH, EXPO_PUBLIC_GITHUB_DATA_JSON_PATH, EXPO_PUBLIC_GITHUB_API_BASE`,
-      );
-      return;
+      };
     }
 
     const content = draftJsonText;
     const contentBase64 = toBase64Utf8(content);
     if (!contentBase64) {
-      setGithubResultText("Base64 encoding is unavailable (globalThis.btoa missing).");
-      return;
+      return { ok: false, text: "Base64 encoding is unavailable (globalThis.btoa missing)." };
     }
 
-    setGithubSending(true);
-    setGithubResultText("Sending...");
     try {
       const { sha, notFound } = await readGithubContentsSha({ apiBase, owner, repo, branch, path, token });
       const changes = listChangedFields({ originalById, draftById, amountTextById, subsTextById });
@@ -445,22 +443,54 @@ export function LoadDataScreen() {
         contentBase64,
         sha: notFound ? undefined : sha,
       });
-
-      setGithubResultText(
-        [
-          "Success.",
-          put.commitSha ? `commitSha: ${put.commitSha}` : "",
-          put.commitUrl ? `commitUrl: ${put.commitUrl}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      );
+      const text = [
+        t("loadDataSendSuccess"),
+        put.commitSha ? `commitSha: ${put.commitSha}` : "",
+        put.commitUrl ? `commitUrl: ${put.commitUrl}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+      return { ok: true, text };
     } catch (e) {
-      setGithubResultText(String((e as any)?.message ?? e));
-    } finally {
-      setGithubSending(false);
+      return { ok: false, text: String((e as any)?.message ?? e) };
     }
-  }, [amountTextById, draftById, dirty, originalById, selectedSchedule, subsTextById, t]);
+  }, [amountInvalidCount, amountTextById, dirty, draftById, draftJsonText, originalById, selectedSchedule, subsTextById, t]);
+
+  const sendToGithub = useCallback(async () => {
+    if (!selectedSchedule) return;
+    setGithubSending(true);
+    setGithubResultText("Sending...");
+    const result = await performGithubSend();
+    setGithubResultText(result.text);
+    if (!isDeveloper) {
+      setToast({
+        kind: result.ok ? "success" : "error",
+        text: result.ok ? t("loadDataSendSuccess") : t("loadDataSendError"),
+      });
+    }
+    setGithubSending(false);
+  }, [isDeveloper, performGithubSend, selectedSchedule, t]);
+
+  const onPressSendData = useCallback(async () => {
+    if (isDeveloper) {
+      openPayloadPreview();
+      return;
+    }
+    if (!selectedSchedule) return;
+    setGithubSending(true);
+    const result = await performGithubSend();
+    setGithubSending(false);
+    setToast({
+      kind: result.ok ? "success" : "error",
+      text: result.ok ? t("loadDataSendSuccess") : `${t("loadDataSendError")}: ${result.text}`,
+    });
+  }, [isDeveloper, openPayloadPreview, performGithubSend, selectedSchedule, t]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   const persistDay = useCallback(
     async (dayId: string, updates: Partial<PlanDay>) => {
@@ -530,7 +560,7 @@ export function LoadDataScreen() {
           </View>
         ) : (
           <>
-            {(todayRow || isProgressInRange) ? (
+            {selectedSchedule ? (
               <View style={[styles.todayWrap, { borderColor: colors.borderLight, backgroundColor: colors.card }]}>
                 <Text style={[styles.todayTitle, { color: colors.text }]}>
                   {t("loadDataCurrentDay")}
@@ -660,30 +690,36 @@ export function LoadDataScreen() {
                       <View style={[styles.field, styles.fieldFull]}>
                         <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("loadDataColType")}</Text>
                         <TextInput
-                          style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
+                          style={[styles.fieldInput, styles.fieldMultiline, { borderColor: colors.borderLight, color: colors.text }]}
                           value={d.foodType}
                           onChangeText={(v) => updateDay(d.id, { foodType: v })}
                           placeholderTextColor={colors.placeholder}
+                          multiline
+                          textAlignVertical="top"
                         />
                       </View>
 
                       <View style={[styles.field, styles.fieldHalf]}>
                         <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("loadDataColFood")}</Text>
                         <TextInput
-                          style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
+                          style={[styles.fieldInput, styles.fieldMultiline, { borderColor: colors.borderLight, color: colors.text }]}
                           value={d.food}
                           onChangeText={(v) => updateDay(d.id, { food: v })}
                           placeholderTextColor={colors.placeholder}
+                          multiline
+                          textAlignVertical="top"
                         />
                       </View>
 
                       <View style={[styles.field, styles.fieldFull]}>
                         <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("loadDataColSubs")}</Text>
                         <TextInput
-                          style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
+                          style={[styles.fieldInput, styles.fieldMultiline, { borderColor: colors.borderLight, color: colors.text }]}
                           value={subsTextById[d.id] ?? d.substitutions.join(", ")}
                           onChangeText={(v) => setSubsTextById((prev) => ({ ...prev, [d.id]: v }))}
                           placeholderTextColor={colors.placeholder}
+                          multiline
+                          textAlignVertical="top"
                         />
                       </View>
 
@@ -706,27 +742,36 @@ export function LoadDataScreen() {
         )}
       </ScrollView>
 
-      <View
+      <BlurView
+        intensity={40}
+        tint={isDarkUi ? "dark" : "light"}
         style={[
           styles.sendBar,
           {
-            backgroundColor: colors.card,
-            borderTopColor: colors.borderLight,
-            paddingBottom: 10 + insets.bottom,
+            backgroundColor: glassBg,
+            borderTopColor: glassBorder,
+            paddingBottom: (sendBarCollapsed ? 2 : 5) + insets.bottom * 0.45,
           },
         ]}
       >
-        <TouchableOpacity
-          onPress={() => setSendBarCollapsed((v) => !v)}
-          style={styles.sendBarHeader}
-        >
-          <Text style={[styles.sendBarTitle, { color: colors.text }]}>
-            {t("loadDataGithubStore")}
-          </Text>
-          <Text style={[styles.sendBarChevron, { color: colors.textMuted }]}>
-            {sendBarCollapsed ? "▲" : "▼"}
-          </Text>
-        </TouchableOpacity>
+        {sendBarCollapsed ? (
+          <TouchableOpacity
+            onPress={() => setSendBarCollapsed(false)}
+            style={styles.sendBarCollapsedToggle}
+          >
+            <Text style={[styles.sendBarChevron, { color: colors.textMuted }]}>▲</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={() => setSendBarCollapsed(true)}
+            style={styles.sendBarHeader}
+          >
+            <Text style={[styles.sendBarTitle, { color: colors.text }]}>
+              {t("loadDataGithubStore")}
+            </Text>
+            <Text style={[styles.sendBarChevron, { color: colors.textMuted }]}>▼</Text>
+          </TouchableOpacity>
+        )}
 
         {!sendBarCollapsed && (
           <View style={styles.sendBarBody}>
@@ -735,15 +780,28 @@ export function LoadDataScreen() {
               {amountInvalidCount ? `· ${t("loadDataInvalidCells", { count: amountInvalidCount })}` : ""}
             </Text>
             <TouchableOpacity
-              style={[g.buttonFull, !selectedSchedule && g.buttonDisabled]}
-              disabled={!selectedSchedule}
-              onPress={openPayloadPreview}
+              style={[g.buttonFull, (!selectedSchedule || githubSending) && g.buttonDisabled]}
+              disabled={!selectedSchedule || githubSending}
+              onPress={onPressSendData}
             >
-              <Text style={g.buttonFullText}>{t("loadDataSendToGithub")}</Text>
+              <Text style={g.buttonFullText}>{githubSending ? "Sending..." : t("loadDataSendToGithub")}</Text>
             </TouchableOpacity>
           </View>
         )}
-      </View>
+      </BlurView>
+
+      {toast ? (
+        <View
+          style={[
+            styles.toast,
+            toast.kind === "success"
+              ? { backgroundColor: colors.chipSelectedBg, borderColor: colors.primary }
+              : { backgroundColor: colors.chipBg, borderColor: colors.danger },
+          ]}
+        >
+          <Text style={[styles.toastText, { color: colors.text }]}>{toast.text}</Text>
+        </View>
+      ) : null}
 
       <Modal visible={payloadModalVisible} animationType="slide" transparent>
         <View style={g.modalOverlay}>
@@ -961,13 +1019,25 @@ function useLocalStyles(colors: {
           right: 0,
           bottom: 0,
           borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopLeftRadius: spacing.radiusLg,
+          borderTopRightRadius: spacing.radiusLg,
           paddingHorizontal: spacing.screenPadding,
-          paddingTop: 10,
+          paddingTop: 4,
+          shadowColor: "#000",
+          shadowOpacity: 0.1,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: -2 },
+          elevation: 3,
         },
         sendBarHeader: {
           flexDirection: "row",
           alignItems: "center",
-          paddingVertical: 6,
+          paddingVertical: 3,
+        },
+        sendBarCollapsedToggle: {
+          alignItems: "center",
+          justifyContent: "center",
+          paddingVertical: 2,
         },
         sendBarTitle: {
           flex: 1,
@@ -979,7 +1049,7 @@ function useLocalStyles(colors: {
           paddingLeft: 8,
         },
         sendBarBody: {
-          paddingTop: 6,
+          paddingTop: 3,
         },
         sendBarMeta: {
           fontSize: 12,
@@ -999,6 +1069,21 @@ function useLocalStyles(colors: {
           marginTop: 10,
           fontSize: 12,
           fontFamily: fonts.regular,
+        },
+        toast: {
+          position: "absolute",
+          left: spacing.screenPadding,
+          right: spacing.screenPadding,
+          bottom: 110,
+          borderWidth: 1,
+          borderRadius: spacing.radiusMd,
+          paddingVertical: 10,
+          paddingHorizontal: 12,
+        },
+        toastText: {
+          fontSize: 13,
+          fontFamily: fonts.medium,
+          textAlign: "center",
         },
       }),
     [colors.borderLight],

@@ -5,16 +5,22 @@ import { KEYS } from "../data/storageKeys";
 type PreferencesContextValue = {
   hideSubstitutions: boolean;
   setHideSubstitutions: (value: boolean) => void;
+  isDeveloper: boolean;
+  setIsDeveloper: (value: boolean) => void;
 };
 
 const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 
 export function PreferencesProvider({ children }: { children: React.ReactNode }) {
   const [hideSubstitutions, setHideSubstitutionsState] = useState(false);
+  const [isDeveloper, setIsDeveloperState] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(KEYS.HIDE_SUBSTITUTIONS).then((stored) => {
       if (stored === "true") setHideSubstitutionsState(true);
+    });
+    AsyncStorage.getItem(KEYS.IS_DEVELOPER).then((stored) => {
+      if (stored === "true") setIsDeveloperState(true);
     });
   }, []);
 
@@ -23,9 +29,14 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
     AsyncStorage.setItem(KEYS.HIDE_SUBSTITUTIONS, String(value));
   };
 
+  const setIsDeveloper = (value: boolean) => {
+    setIsDeveloperState(value);
+    AsyncStorage.setItem(KEYS.IS_DEVELOPER, String(value));
+  };
+
   const value = useMemo<PreferencesContextValue>(
-    () => ({ hideSubstitutions, setHideSubstitutions }),
-    [hideSubstitutions],
+    () => ({ hideSubstitutions, setHideSubstitutions, isDeveloper, setIsDeveloper }),
+    [hideSubstitutions, isDeveloper],
   );
 
   return (

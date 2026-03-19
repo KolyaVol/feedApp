@@ -36,7 +36,7 @@ export function SettingsScreen() {
   const isDark = theme === "dark";
   const styles = useLocalStyles(colors);
 
-  const { hideSubstitutions, setHideSubstitutions } = usePreferences();
+  const { hideSubstitutions, setHideSubstitutions, isDeveloper, setIsDeveloper } = usePreferences();
   const {
     reminders,
     addReminder,
@@ -217,6 +217,18 @@ export function SettingsScreen() {
         <Switch
           value={hideSubstitutions}
           onValueChange={setHideSubstitutions}
+          trackColor={{ false: colors.switchTrack, true: colors.primary }}
+        />
+      </View>
+
+      <View style={[g.cardRow, { marginHorizontal: 16 }]}>
+        <View style={g.rowText}>
+          <Text style={g.titleCard}>{t("settingsDeveloperMode")}</Text>
+          <Text style={g.subtitle}>{t("settingsDeveloperModeSubtitle")}</Text>
+        </View>
+        <Switch
+          value={isDeveloper}
+          onValueChange={setIsDeveloper}
           trackColor={{ false: colors.switchTrack, true: colors.primary }}
         />
       </View>
