@@ -27,7 +27,11 @@ export function StatisticsScreen() {
   const { t } = useLocale();
   const { colors } = useTheme();
   const styles = useLocalStyles(colors);
-  const { planDays, schedules, loading, refresh } = useSchedule();
+  const { planDays, loading, refresh, progressDateStr } = useSchedule();
+
+  const passedPlanDays = useMemo(() => {
+    return planDays.filter((d) => d.date <= progressDateStr);
+  }, [planDays, progressDateStr]);
 
   useFocusEffect(
     useCallback(() => {
@@ -36,23 +40,23 @@ export function StatisticsScreen() {
   );
 
   const summary = useMemo(() => {
-    if (!planDays.length) return null;
-    const sortedDates = planDays.map((d) => d.date).sort();
-    const uniqueFoods = new Set(planDays.map((d) => d.food));
-    const uniqueFoodTypes = new Set(planDays.map((d) => d.foodType));
-    const totalGrams = planDays.reduce((s, d) => s + d.amountGrams, 0);
+    if (!passedPlanDays.length) return null;
+    const sortedDates = passedPlanDays.map((d) => d.date).sort();
+    const uniqueFoods = new Set(passedPlanDays.map((d) => d.food));
+    const uniqueFoodTypes = new Set(passedPlanDays.map((d) => d.foodType));
+    const totalGrams = passedPlanDays.reduce((s, d) => s + d.amountGrams, 0);
     return {
-      totalDays: planDays.length,
+      totalDays: passedPlanDays.length,
       dateRange: `${formatShort(sortedDates[0])} — ${formatShort(sortedDates[sortedDates.length - 1])}`,
       foodsCount: uniqueFoods.size,
       foodTypesCount: uniqueFoodTypes.size,
       totalGrams,
     };
-  }, [planDays]);
+  }, [passedPlanDays]);
 
   const chartData: AggregatedFood[] = useMemo(() => {
     const byType: Record<string, number> = {};
-    for (const d of planDays) {
+    for (const d of passedPlanDays) {
       byType[d.foodType] = (byType[d.foodType] ?? 0) + d.amountGrams;
     }
     return Object.entries(byType)
@@ -64,11 +68,11 @@ export function StatisticsScreen() {
         amount,
       }))
       .sort((a, b) => b.amount - a.amount);
-  }, [planDays, t]);
+  }, [passedPlanDays, t]);
 
   const perFoodStats = useMemo(() => {
     const map: Record<string, { total: number; days: number }> = {};
-    for (const d of planDays) {
+    for (const d of passedPlanDays) {
       if (!map[d.food]) map[d.food] = { total: 0, days: 0 };
       map[d.food].total += d.amountGrams;
       map[d.food].days += 1;
@@ -81,14 +85,14 @@ export function StatisticsScreen() {
         avg: Math.round(total / days),
       }))
       .sort((a, b) => b.total - a.total);
-  }, [planDays]);
+  }, [passedPlanDays]);
 
   const weeklyBreakdown = useMemo(() => {
     const weeks: Record<
       string,
-      { weekNum: number; month: number; days: typeof planDays }
+      { weekNum: number; month: number; days: typeof passedPlanDays }
     > = {};
-    for (const d of planDays) {
+    for (const d of passedPlanDays) {
       const key = `${d.sourceMonth}-${d.weekNumber}`;
       if (!weeks[key])
         weeks[key] = { weekNum: d.weekNumber, month: d.sourceMonth, days: [] };
@@ -97,7 +101,7 @@ export function StatisticsScreen() {
     return Object.values(weeks).sort(
       (a, b) => a.month - b.month || a.weekNum - b.weekNum,
     );
-  }, [planDays]);
+  }, [passedPlanDays]);
 
   const totalGrams = useMemo(
     () => chartData.reduce((s, d) => s + d.amount, 0),
