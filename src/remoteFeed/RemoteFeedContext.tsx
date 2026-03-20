@@ -14,6 +14,7 @@ export interface RemoteFeedState {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  applySchedule: (next: RemoteFeedSchedule) => Promise<void>;
 }
 
 const RemoteFeedContext = createContext<RemoteFeedState | null>(null);
@@ -29,7 +30,17 @@ export function RemoteFeedProvider({ children }: { children: React.ReactNode }) 
     return getTodayFromSchedule(schedule, startDate);
   }, [schedule, startDate]);
 
-  const fetchAndUpdate = useCallback(async (sd: string | null, cachedSchedule: RemoteFeedSchedule | null) => {
+  const scheduleRef = React.useRef(schedule);
+  const startDateRef = React.useRef(startDate);
+  const appliedAtRef = React.useRef(0);
+  useEffect(() => { scheduleRef.current = schedule; }, [schedule]);
+  useEffect(() => { startDateRef.current = startDate; }, [startDate]);
+
+  const fetchAndUpdate = useCallback(async () => {
+    const COOLDOWN_MS = 30_000;
+    if (Date.now() - appliedAtRef.current < COOLDOWN_MS) return;
+    const sd = startDateRef.current;
+    const cachedSchedule = scheduleRef.current;
     const fresh = await fetchRemoteJson(REMOTE_FEED_URL);
     if (!fresh) {
       setError((e) => e ?? "Failed to fetch remote JSON");
@@ -57,10 +68,12 @@ export function RemoteFeedProvider({ children }: { children: React.ReactNode }) 
       try {
         const [cached, sd] = await Promise.all([loadCachedJson(), loadStartDate()]);
         if (cancelled) return;
+        scheduleRef.current = cached;
+        startDateRef.current = sd;
         setSchedule(cached);
         setStartDate(sd);
         setLoading(false);
-        await fetchAndUpdate(sd, cached);
+        await fetchAndUpdate();
       } catch {
         if (cancelled) return;
         setLoading(false);
@@ -73,15 +86,27 @@ export function RemoteFeedProvider({ children }: { children: React.ReactNode }) 
 
   const refresh = useCallback(async () => {
     try {
-      await fetchAndUpdate(startDate, schedule);
+      await fetchAndUpdate();
     } catch {
       // ignore
     }
-  }, [fetchAndUpdate, startDate, schedule]);
+  }, [fetchAndUpdate]);
+
+  const applySchedule = useCallback(async (next: RemoteFeedSchedule) => {
+    appliedAtRef.current = Date.now();
+    scheduleRef.current = next;
+    await saveCachedJson(next);
+    setSchedule(next);
+    setError(null);
+    const sd = startDateRef.current;
+    if (sd) {
+      await scheduleMealsFromFeedData(next, sd);
+    }
+  }, []);
 
   const value = useMemo<RemoteFeedState>(
-    () => ({ schedule, startDate, today, loading, error, refresh }),
-    [schedule, startDate, today, loading, error, refresh],
+    () => ({ schedule, startDate, today, loading, error, refresh, applySchedule }),
+    [schedule, startDate, today, loading, error, refresh, applySchedule],
   );
 
   return (

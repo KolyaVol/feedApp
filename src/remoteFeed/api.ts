@@ -85,6 +85,77 @@ function parseWeek(v: unknown): RemoteFeedPlanWeek | null {
   };
 }
 
+function parseMealMetaFromNotes(notes?: string): {
+  cleanNotes?: string;
+  lunch?: RemoteFeedDayMeal[];
+  evening?: RemoteFeedDayMeal[];
+} {
+  if (!notes) return {};
+  const lines = notes.split("\n");
+  const clean: string[] = [];
+  let lunch: RemoteFeedDayMeal[] | undefined;
+  let evening: RemoteFeedDayMeal[] | undefined;
+
+  for (const line of lines) {
+    if (line.startsWith("__lunch=")) {
+      const [productRaw, amountRaw] = line.replace("__lunch=", "").split("|");
+      const product = (productRaw ?? "").trim();
+      const amount = Number((amountRaw ?? "").trim());
+      if (product && Number.isFinite(amount)) {
+        lunch = [{ product, amount_grams: amount }];
+      }
+      continue;
+    }
+    if (line.startsWith("__evening=")) {
+      const [productRaw, amountRaw] = line.replace("__evening=", "").split("|");
+      const product = (productRaw ?? "").trim();
+      const amount = Number((amountRaw ?? "").trim());
+      if (product && Number.isFinite(amount)) {
+        evening = [{ product, amount_grams: amount }];
+      }
+      continue;
+    }
+    clean.push(line);
+  }
+
+  const cleanNotes = clean.join("\n").trim();
+  return {
+    cleanNotes: cleanNotes || undefined,
+    lunch,
+    evening,
+  };
+}
+
+function parseWeeklyAsIntroPlan(v: unknown): RemoteFeedPlanWeek[] | null {
+  if (!Array.isArray(v)) return null;
+  const out: RemoteFeedPlanWeek[] = [];
+  for (const weekValue of v) {
+    if (!isRecord(weekValue)) continue;
+    const week = asNumber(weekValue.week);
+    if (week === null || !Array.isArray(weekValue.days)) continue;
+    const days: RemoteFeedPlanDay[] = [];
+    for (const dayValue of weekValue.days) {
+      if (!isRecord(dayValue)) continue;
+      const day = asNumber(dayValue.day);
+      const food = asString(dayValue.food);
+      const amount = asNumber(dayValue.amount_grams);
+      if (day === null || !food || amount === null) continue;
+      const notesRaw = asString(dayValue.notes) ?? undefined;
+      const parsedNotes = parseMealMetaFromNotes(notesRaw);
+      days.push({
+        day,
+        notes: parsedNotes.cleanNotes,
+        morning: { product: food, amount_grams: amount },
+        lunch: parsedNotes.lunch,
+        evening: parsedNotes.evening,
+      });
+    }
+    if (!days.length) continue;
+    out.push({ week, days });
+  }
+  return out.length ? out : null;
+}
+
 function parseSlot(v: unknown): RemoteFeedSlot | null {
   if (!isRecord(v)) return null;
   const name = asString(v.name);
@@ -103,10 +174,11 @@ function parseSlot(v: unknown): RemoteFeedSlot | null {
 function parseSchedule(v: unknown): RemoteFeedSchedule | null {
   if (!isRecord(v)) return null;
   const month = asNumber(v.month);
-  const introRaw = v.introduction_plan;
-  if (month === null || !Array.isArray(introRaw)) return null;
-
-  const introduction_plan = introRaw.map(parseWeek).filter(Boolean) as RemoteFeedPlanWeek[];
+  if (month === null) return null;
+  const introRaw = Array.isArray(v.introduction_plan) ? v.introduction_plan : null;
+  const introduction_plan = introRaw
+    ? (introRaw.map(parseWeek).filter(Boolean) as RemoteFeedPlanWeek[])
+    : (parseWeeklyAsIntroPlan(v.weekly_schedule) ?? []);
   if (!introduction_plan.length) return null;
 
   return {
@@ -145,14 +217,22 @@ function parseRoot(v: unknown): RemoteFeedSchedule | null {
   return { ...latest, months: sorted };
 }
 
+export function parseRemoteJsonText(text: string): RemoteFeedSchedule | null {
+  try {
+    const clean = text.replace(/^\uFEFF/, "").replace(/,\s*([}\]])/g, "$1");
+    const json = JSON.parse(clean) as unknown;
+    return parseRoot(json);
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchRemoteJson(url: string): Promise<RemoteFeedSchedule | null> {
   try {
     const res = await fetch(withCacheBusting(url));
     if (!res.ok) return null;
     const text = await res.text();
-    const clean = text.replace(/^\uFEFF/, "").replace(/,\s*([}\]])/g, "$1");
-    const json = JSON.parse(clean) as unknown;
-    return parseRoot(json);
+    return parseRemoteJsonText(text);
   } catch {
     return null;
   }

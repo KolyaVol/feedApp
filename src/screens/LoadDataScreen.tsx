@@ -12,12 +12,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { BlurView } from "expo-blur";
-import { useSchedule } from "../hooks/useSchedule";
+import { triggerGlobalScheduleRefresh, useSchedule } from "../hooks/useSchedule";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLocale } from "../contexts/LocaleContext";
 import { usePreferences } from "../contexts/PreferencesContext";
 import { useRemoteFeedContext } from "../remoteFeed/RemoteFeedContext";
+import { parseRemoteJsonText } from "../remoteFeed/api";
 import { fonts, spacing } from "../theme";
 import type { LoadedSchedule, PlanDay } from "../types";
 import { addDays, addPlanDays, formatDateStr, updatePlanDay as updatePlanDayStorage } from "../data/planDays";
@@ -168,6 +169,30 @@ function toBase64Utf8(text: string): string | null {
   }
 }
 
+function fromBase64Utf8(base64: string): string | null {
+  try {
+    const anyGlobal = globalThis as any;
+    if (anyGlobal?.Buffer?.from) {
+      return anyGlobal.Buffer.from(base64, "base64").toString("utf8");
+    }
+
+    if (typeof atob !== "undefined") {
+      const binary = atob(base64);
+      if (typeof TextDecoder !== "undefined") {
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        return new TextDecoder().decode(bytes);
+      }
+      return binary;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function jsonString(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
@@ -194,11 +219,11 @@ async function readGithubContentsSha(opts: {
   branch: string;
   path: string;
   token: string;
-}): Promise<{ sha?: string; notFound: boolean }> {
+}): Promise<{ sha?: string; text?: string; notFound: boolean }> {
   const url =
     `${opts.apiBase.replace(/\/+$/, "")}` +
     `/repos/${encodeURIComponent(opts.owner)}/${encodeURIComponent(opts.repo)}` +
-    `/contents/${githubPathEncode(opts.path)}?ref=${encodeURIComponent(opts.branch)}`;
+    `/contents/${githubPathEncode(opts.path)}?ref=${encodeURIComponent(opts.branch)}&t=${Date.now()}`;
 
   const res = await fetch(url, {
     method: "GET",
@@ -209,7 +234,7 @@ async function readGithubContentsSha(opts: {
     },
   });
 
-  if (res.status === 404) return { sha: undefined, notFound: true };
+  if (res.status === 404) return { sha: undefined, text: undefined, notFound: true };
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`GitHub GET contents failed (${res.status}): ${text || res.statusText}`);
@@ -217,7 +242,11 @@ async function readGithubContentsSha(opts: {
 
   const json = (await res.json()) as any;
   const sha = json?.sha;
-  return { sha: typeof sha === "string" ? sha : undefined, notFound: false };
+  const contentRaw = typeof json?.content === "string" ? json.content : "";
+  const content = contentRaw.replace(/\n/g, "");
+  let text: string | undefined;
+  if (content) text = fromBase64Utf8(content) ?? undefined;
+  return { sha: typeof sha === "string" ? sha : undefined, text, notFound: false };
 }
 
 async function putGithubContents(opts: {
@@ -268,6 +297,93 @@ async function putGithubContents(opts: {
 function isGithubConflictError(error: unknown): boolean {
   const msg = String((error as any)?.message ?? error ?? "");
   return /\(409\)|\b409\b|Conflict/i.test(msg);
+}
+
+function normalizeDraftDays(days: PlanDay[], amountTextById: Record<string, string>, subsTextById: Record<string, string>): PlanDay[] {
+  return days.map((d) => {
+    const amountTxt = amountTextById[d.id] ?? String(d.amountGrams);
+    const amountParsed = parseInt(amountTxt || "0", 10);
+    const subsTxt = subsTextById[d.id] ?? d.substitutions.join(", ");
+    return {
+      ...d,
+      amountGrams: isNaN(amountParsed) ? 0 : amountParsed,
+      substitutions: subsTxt
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    };
+  });
+}
+
+function dayNumberInWeek(days: PlanDay[], target: PlanDay): number {
+  return days
+    .filter((x) => x.weekNumber === target.weekNumber)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .findIndex((x) => x.id === target.id) + 1;
+}
+
+function mergeMonthData(root: any, month: number, normalizedDays: PlanDay[]): any {
+  const byWeekDay = new Map<string, PlanDay>();
+  for (const d of normalizedDays) {
+    const day = dayNumberInWeek(normalizedDays, d);
+    byWeekDay.set(`${d.weekNumber}:${day}`, d);
+  }
+
+  const applyToMonth = (monthNode: any) => {
+    if (!monthNode || typeof monthNode !== "object") return;
+
+    if (Array.isArray(monthNode.introduction_plan)) {
+      for (const w of monthNode.introduction_plan) {
+        if (!w || typeof w !== "object" || !Array.isArray(w.days)) continue;
+        const weekNo = Number(w.week);
+        for (const dayNode of w.days) {
+          if (!dayNode || typeof dayNode !== "object") continue;
+          const dayNo = Number(dayNode.day);
+          const draft = byWeekDay.get(`${weekNo}:${dayNo}`);
+          if (!draft) continue;
+          const parsedMeta = parseMealMeta(draft.notes);
+          dayNode.morning = { product: draft.food, amount_grams: draft.amountGrams };
+          if (parsedMeta.lunchFood || parsedMeta.lunchAmount) {
+            const amount = parseInt(parsedMeta.lunchAmount || "0", 10);
+            dayNode.lunch = [{ product: parsedMeta.lunchFood, amount_grams: isNaN(amount) ? 0 : amount }];
+          }
+          if (parsedMeta.eveningFood || parsedMeta.eveningAmount) {
+            const amount = parseInt(parsedMeta.eveningAmount || "0", 10);
+            dayNode.evening = [{ product: parsedMeta.eveningFood, amount_grams: isNaN(amount) ? 0 : amount }];
+          }
+          dayNode.notes = parsedMeta.notes || "";
+        }
+      }
+    }
+
+    if (Array.isArray(monthNode.weekly_schedule)) {
+      for (const w of monthNode.weekly_schedule) {
+        if (!w || typeof w !== "object" || !Array.isArray(w.days)) continue;
+        const weekNo = Number(w.week);
+        for (const dayNode of w.days) {
+          if (!dayNode || typeof dayNode !== "object") continue;
+          const dayNo = Number(dayNode.day);
+          const draft = byWeekDay.get(`${weekNo}:${dayNo}`);
+          if (!draft) continue;
+          dayNode.time = draft.time;
+          dayNode.food_type = draft.foodType;
+          dayNode.food = draft.food;
+          dayNode.amount_grams = draft.amountGrams;
+          dayNode.substitutions = draft.substitutions.length ? draft.substitutions : undefined;
+          dayNode.notes = draft.notes || undefined;
+        }
+      }
+    }
+  };
+
+  const nextRoot = JSON.parse(JSON.stringify(root));
+  if (Array.isArray(nextRoot?.months)) {
+    const target = nextRoot.months.find((m: any) => Number(m?.month) === month);
+    if (target) applyToMonth(target);
+  } else if (Number(nextRoot?.month) === month) {
+    applyToMonth(nextRoot);
+  }
+  return nextRoot;
 }
 
 function buildScheduleJson(schedule: LoadedSchedule, days: PlanDay[]): ScheduleJson {
@@ -372,19 +488,7 @@ export function LoadDataScreen() {
 
   const draftJsonText = useMemo(() => {
     if (!selectedSchedule) return "";
-    const normalizedDays = draftDaysSorted.map((d) => {
-      const amountTxt = amountTextById[d.id] ?? String(d.amountGrams);
-      const amountParsed = parseInt(amountTxt || "0", 10);
-      const subsTxt = subsTextById[d.id] ?? d.substitutions.join(", ");
-      return {
-        ...d,
-        amountGrams: isNaN(amountParsed) ? 0 : amountParsed,
-        substitutions: subsTxt
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-      };
-    });
+    const normalizedDays = normalizeDraftDays(draftDaysSorted, amountTextById, subsTextById);
     return jsonString(buildScheduleJson(selectedSchedule, normalizedDays));
   }, [amountTextById, draftDaysSorted, selectedSchedule, subsTextById]);
 
@@ -449,7 +553,7 @@ export function LoadDataScreen() {
     setPayloadModalVisible(true);
   }, [draftJsonText, selectedSchedule]);
 
-  const performGithubSend = useCallback(async (): Promise<{ ok: boolean; text: string }> => {
+  const performGithubSend = useCallback(async (): Promise<{ ok: boolean; text: string; scheduleText?: string }> => {
     if (!selectedSchedule) return { ok: false, text: "No schedule selected." };
     if (!dirty) return { ok: false, text: "No changes to send." };
     if (amountInvalidCount > 0) return { ok: false, text: "Fix invalid amount cells before sending." };
@@ -468,17 +572,28 @@ export function LoadDataScreen() {
           `Missing env.\n` +
           `Need: EXPO_PUBLIC_GITHUB_TOKEN, EXPO_PUBLIC_GITHUB_OWNER, EXPO_PUBLIC_GITHUB_REPO\n` +
           `Optional: EXPO_PUBLIC_GITHUB_BRANCH, EXPO_PUBLIC_GITHUB_DATA_JSON_PATH, EXPO_PUBLIC_GITHUB_API_BASE`,
+        scheduleText: undefined,
       };
     }
 
-    const content = draftJsonText;
-    const contentBase64 = toBase64Utf8(content);
-    if (!contentBase64) {
-      return { ok: false, text: "Base64 encoding is unavailable (globalThis.btoa missing)." };
-    }
-
     try {
-      const { sha, notFound } = await readGithubContentsSha({ apiBase, owner, repo, branch, path, token });
+      const normalizedDays = normalizeDraftDays(draftDaysSorted, amountTextById, subsTextById);
+      const current = await readGithubContentsSha({ apiBase, owner, repo, branch, path, token });
+      if (current.notFound || !current.text) {
+        return { ok: false, text: "Target JSON file not found on GitHub.", scheduleText: undefined };
+      }
+      let rootJson: any;
+      try {
+        rootJson = JSON.parse(current.text);
+      } catch {
+        return { ok: false, text: "Current GitHub JSON is invalid and cannot be merged safely.", scheduleText: undefined };
+      }
+      const merged = mergeMonthData(rootJson, selectedSchedule.month, normalizedDays);
+      const mergedText = jsonString(merged);
+      const contentBase64 = toBase64Utf8(mergedText);
+      if (!contentBase64) {
+        return { ok: false, text: "Base64 encoding is unavailable (globalThis.btoa missing).", scheduleText: undefined };
+      }
       const changes = listChangedFields({ originalById, draftById, amountTextById, subsTextById });
       const start = selectedSchedule.startDate;
       const first = changes[0];
@@ -489,31 +604,39 @@ export function LoadDataScreen() {
             ? `${changes.length} days updated`
             : "Update";
       const message = `${summary} (${path})`;
-      let put = await putGithubContents({
-        apiBase,
-        owner,
-        repo,
-        branch,
-        path,
-        token,
-        message,
-        contentBase64,
-        sha: notFound ? undefined : sha,
-      }).catch(async (error) => {
-        if (!isGithubConflictError(error)) throw error;
-        const latest = await readGithubContentsSha({ apiBase, owner, repo, branch, path, token });
-        return putGithubContents({
-          apiBase,
-          owner,
-          repo,
-          branch,
-          path,
-          token,
-          message,
-          contentBase64,
-          sha: latest.notFound ? undefined : latest.sha,
-        });
-      });
+
+      let nextSha = current.sha;
+      let nextBase64 = contentBase64;
+      let put: { commitUrl?: string; commitSha?: string } | null = null;
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          put = await putGithubContents({
+            apiBase,
+            owner,
+            repo,
+            branch,
+            path,
+            token,
+            message,
+            contentBase64: nextBase64,
+            sha: nextSha,
+          });
+          break;
+        } catch (error) {
+          lastError = error;
+          if (!isGithubConflictError(error) || attempt === 2) break;
+          const latest = await readGithubContentsSha({ apiBase, owner, repo, branch, path, token });
+          if (latest.notFound || !latest.text) break;
+          const latestRoot = JSON.parse(latest.text);
+          const latestMerged = mergeMonthData(latestRoot, selectedSchedule.month, normalizedDays);
+          const latestBase64 = toBase64Utf8(jsonString(latestMerged));
+          if (!latestBase64) break;
+          nextSha = latest.sha;
+          nextBase64 = latestBase64;
+        }
+      }
+      if (!put) throw lastError ?? new Error("GitHub PUT failed");
       const text = [
         t("loadDataSendSuccess"),
         put.commitSha ? `commitSha: ${put.commitSha}` : "",
@@ -521,18 +644,21 @@ export function LoadDataScreen() {
       ]
         .filter(Boolean)
         .join("\n");
-      return { ok: true, text };
+      return { ok: true, text, scheduleText: mergedText };
     } catch (e) {
-      return { ok: false, text: String((e as any)?.message ?? e) };
+      return { ok: false, text: String((e as any)?.message ?? e), scheduleText: undefined };
     }
-  }, [amountInvalidCount, amountTextById, dirty, draftById, draftJsonText, originalById, selectedSchedule, subsTextById, t]);
+  }, [amountInvalidCount, amountTextById, dirty, draftById, draftDaysSorted, originalById, selectedSchedule, subsTextById, t]);
 
-  const refreshAfterSuccessfulSend = useCallback(async () => {
-    await Promise.all([
-      refresh(),
-      remote?.refresh ? remote.refresh() : Promise.resolve(),
-    ]);
-  }, [refresh, remote]);
+  const refreshAfterSuccessfulSend = useCallback(async (scheduleText?: string) => {
+    if (scheduleText && remote?.applySchedule) {
+      const parsed = parseRemoteJsonText(scheduleText);
+      if (parsed) {
+        await remote.applySchedule(parsed);
+      }
+    }
+    triggerGlobalScheduleRefresh();
+  }, [remote]);
 
   const sendToGithub = useCallback(async () => {
     if (!selectedSchedule) return;
@@ -540,7 +666,7 @@ export function LoadDataScreen() {
     setGithubResultText("Sending...");
     const result = await performGithubSend();
     if (result.ok) {
-      await refreshAfterSuccessfulSend();
+      await refreshAfterSuccessfulSend(result.scheduleText);
     }
     setGithubResultText(result.text);
     if (!isDeveloper) {
@@ -561,7 +687,7 @@ export function LoadDataScreen() {
     setGithubSending(true);
     const result = await performGithubSend();
     if (result.ok) {
-      await refreshAfterSuccessfulSend();
+      await refreshAfterSuccessfulSend(result.scheduleText);
     }
     setGithubSending(false);
     setToast({
@@ -742,7 +868,9 @@ export function LoadDataScreen() {
                 const amountParsed = parseInt(amountText, 10);
                 const amountBad = !amountText.trim() || isNaN(amountParsed) || amountParsed < 0;
                 const isProgress = d.date === progressDayStr;
-                const remoteDay = d.scheduleId === "remote" ? remoteDayPlans.find((x) => x.date === d.date) : undefined;
+                const remoteDay = d.scheduleId.startsWith("remote-")
+                  ? remoteDayPlans.find((x) => x.date === d.date)
+                  : undefined;
                 const lunchExisting = mealFromDay(remoteDay, "lunch");
                 const eveningExisting = mealFromDay(remoteDay, "evening");
                 const parsedMeta = parseMealMeta(d.notes);

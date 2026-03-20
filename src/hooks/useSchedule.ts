@@ -73,6 +73,11 @@ interface ScheduleJson {
 
 let sharedProgressDateStr: string | null = null;
 const progressDateListeners = new Set<(value: string) => void>();
+const scheduleRefreshListeners = new Set<() => void>();
+
+export function triggerGlobalScheduleRefresh() {
+  for (const listener of scheduleRefreshListeners) listener();
+}
 
 function flattenAllowedProducts(input?: {
   vegetables?: string[];
@@ -237,6 +242,16 @@ export function useSchedule() {
     setSchedules(scheds);
     setLoading(false);
   }, []);
+
+  useEffect(() => {
+    const listener = () => {
+      refresh();
+    };
+    scheduleRefreshListeners.add(listener);
+    return () => {
+      scheduleRefreshListeners.delete(listener);
+    };
+  }, [refresh]);
 
   useEffect(() => {
     refresh();
