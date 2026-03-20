@@ -6,7 +6,7 @@ export function getScheduleDayCount(schedule: RemoteFeedSchedule): number {
 }
 
 export function isScheduleValid(schedule: RemoteFeedSchedule): boolean {
-  if (!schedule.weekly_schedule?.length) return false;
+  if (!schedule.introduction_plan?.length) return false;
   return getScheduleDayCount(schedule) >= 1;
 }
 

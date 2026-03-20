@@ -25,6 +25,23 @@ export interface Reminder {
   notificationId?: string;
 }
 
+export type MealType = "morning" | "lunch" | "evening";
+
+export interface DayMealEntry {
+  mealType: MealType;
+  product: string;
+  amountGrams: number;
+}
+
+export interface DayPlan {
+  date: string;
+  weekNumber: number;
+  dayNumber: number;
+  notes?: string;
+  meals: DayMealEntry[];
+  sourceMonth: number;
+}
+
 export type StatsPeriod = "daily" | "weekly" | "monthly";
 
 export interface AggregatedFood {

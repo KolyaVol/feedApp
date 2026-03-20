@@ -1,4 +1,10 @@
-import type { RemoteFeedSchedule, RemoteFeedWeek, RemoteFeedDay } from "./types";
+import type {
+  RemoteFeedDayMeal,
+  RemoteFeedPlanDay,
+  RemoteFeedPlanWeek,
+  RemoteFeedSchedule,
+  RemoteFeedSlot,
+} from "./types";
 
 function withCacheBusting(url: string): string {
   const join = url.includes("?") ? "&" : "?";
@@ -26,75 +32,106 @@ function asStringArray(v: unknown): string[] | undefined {
   return out;
 }
 
-function parseDay(v: unknown): RemoteFeedDay | null {
+function parseMeal(v: unknown): RemoteFeedDayMeal | null {
   if (!isRecord(v)) return null;
-  const day = asNumber(v.day);
-  const time = asString(v.time);
-  const foodType = asString(v.food_type);
-  const food = asString(v.food);
-  const amountGrams = asNumber(v.amount_grams);
-  if (day === null || !time || !foodType || !food || amountGrams === null) return null;
-
-  const substitutions = asStringArray(v.substitutions);
-  const notes = asString(v.notes) ?? undefined;
-
-  return {
-    day,
-    time,
-    food_type: foodType,
-    food,
-    amount_grams: amountGrams,
-    substitutions,
-    notes,
-  };
+  const product = asString(v.product);
+  const amount_grams = asNumber(v.amount_grams);
+  if (!product || amount_grams === null) return null;
+  return { product, amount_grams };
 }
 
-function parseWeek(v: unknown): RemoteFeedWeek | null {
+function parsePlanDay(v: unknown): RemoteFeedPlanDay | null {
+  if (!isRecord(v)) return null;
+  const day = asNumber(v.day);
+  if (day === null) return null;
+  const morning = parseMeal(v.morning);
+  const lunch = Array.isArray(v.lunch)
+    ? (v.lunch.map(parseMeal).filter(Boolean) as RemoteFeedDayMeal[])
+    : undefined;
+  const evening = Array.isArray(v.evening)
+    ? (v.evening.map(parseMeal).filter(Boolean) as RemoteFeedDayMeal[])
+    : undefined;
+  if (!morning && !lunch?.length && !evening?.length) return null;
+  return { day, notes: asString(v.notes) ?? undefined, morning: morning ?? undefined, lunch, evening };
+}
+
+function parseWeek(v: unknown): RemoteFeedPlanWeek | null {
   if (!isRecord(v)) return null;
   const week = asNumber(v.week);
   const daysRaw = v.days;
   if (week === null || !Array.isArray(daysRaw)) return null;
-
-  const days: RemoteFeedDay[] = [];
-  for (const d of daysRaw) {
-    const parsed = parseDay(d);
-    if (parsed) days.push(parsed);
-  }
+  const days = daysRaw.map(parsePlanDay).filter(Boolean) as RemoteFeedPlanDay[];
   if (!days.length) return null;
+  return { week, focus: asString(v.focus) ?? undefined, notes: asString(v.notes) ?? undefined, days };
+}
 
-  return { week, days };
+function parseSlot(v: unknown): RemoteFeedSlot | null {
+  if (!isRecord(v)) return null;
+  const name = asString(v.name);
+  const time = asString(v.time);
+  if (!name || !time) return null;
+  if (name !== "morning" && name !== "lunch" && name !== "evening") return null;
+  return {
+    name,
+    time,
+    purpose: asString(v.purpose) ?? undefined,
+    rules: asStringArray(v.rules),
+    activation_condition: asString(v.activation_condition) ?? undefined,
+  };
 }
 
 function parseSchedule(v: unknown): RemoteFeedSchedule | null {
   if (!isRecord(v)) return null;
   const month = asNumber(v.month);
-  const weeklyRaw = v.weekly_schedule;
-  if (month === null || !Array.isArray(weeklyRaw)) return null;
+  const introRaw = v.introduction_plan;
+  if (month === null || !Array.isArray(introRaw)) return null;
 
-  const weekly_schedule: RemoteFeedWeek[] = [];
-  for (const w of weeklyRaw) {
-    const parsed = parseWeek(w);
-    if (parsed) weekly_schedule.push(parsed);
-  }
-  if (!weekly_schedule.length) return null;
-
-  const signs_of_readiness = asStringArray(v.signs_of_readiness);
-  const safety_guidelines = asStringArray(v.safety_guidelines);
+  const introduction_plan = introRaw.map(parseWeek).filter(Boolean) as RemoteFeedPlanWeek[];
+  if (!introduction_plan.length) return null;
 
   return {
     month,
-    weekly_schedule,
-    signs_of_readiness,
-    safety_guidelines,
+    breastfeeding: isRecord(v.breastfeeding)
+      ? {
+          on_demand:
+            typeof v.breastfeeding.on_demand === "boolean"
+              ? v.breastfeeding.on_demand
+              : undefined,
+          priority: asString(v.breastfeeding.priority) ?? undefined,
+          rules: asStringArray(v.breastfeeding.rules),
+        }
+      : undefined,
+    feeding_schedule: isRecord(v.feeding_schedule)
+      ? {
+          meal_slots: Array.isArray(v.feeding_schedule.meal_slots)
+            ? (v.feeding_schedule.meal_slots.map(parseSlot).filter(Boolean) as RemoteFeedSlot[])
+            : undefined,
+        }
+      : undefined,
+    introduction_plan,
+    hidden_risks: asStringArray(v.hidden_risks),
   };
+}
+
+function parseRoot(v: unknown): RemoteFeedSchedule | null {
+  const direct = parseSchedule(v);
+  if (direct) return direct;
+  if (!isRecord(v) || !Array.isArray(v.months)) return null;
+  for (const monthNode of v.months) {
+    const parsed = parseSchedule(monthNode);
+    if (parsed) return parsed;
+  }
+  return null;
 }
 
 export async function fetchRemoteJson(url: string): Promise<RemoteFeedSchedule | null> {
   try {
     const res = await fetch(withCacheBusting(url));
     if (!res.ok) return null;
-    const json = (await res.json()) as unknown;
-    return parseSchedule(json);
+    const text = await res.text();
+    const clean = text.replace(/^\uFEFF/, "").replace(/,\s*([}\]])/g, "$1");
+    const json = JSON.parse(clean) as unknown;
+    return parseRoot(json);
   } catch {
     return null;
   }

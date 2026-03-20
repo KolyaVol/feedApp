@@ -1,0 +1,334 @@
+{
+  "meta": {
+    "version": "2.1",
+    "approach": "контролируемое расширение рациона",
+    "data_model_note": "структура поддерживает несколько месяцев в массиве months"
+  },
+  "months": [
+    {
+      "month": 6,
+      "breastfeeding": {
+        "on_demand": true,
+        "priority": "основной источник питания",
+        "rules": ["всегда после прикорма", "не заменяется прикормом в 6 месяцев"]
+      },
+      "current_state": {
+        "safe_products": ["кабачок", "брокколи"],
+        "current_max_volume_grams": 55,
+        "reactions_history": []
+      },
+      "feeding_schedule": {
+        "meals_per_day": {
+          "current": 2,
+          "planned_next_stage": 3
+        },
+        "meal_slots": [
+          {
+            "name": "morning",
+            "time": "09:00-11:00",
+            "purpose": "введение новых продуктов",
+            "rules": ["только один новый продукт", "начинать с 5 г", "увеличивать постепенно"]
+          },
+          {
+            "name": "lunch",
+            "time": "12:00-14:00",
+            "purpose": "сытность + проверенные продукты",
+            "rules": [
+              "сначала проверенные овощи",
+              "после адаптации можно добавлять кашу",
+              "можно смешивать только проверенные продукты"
+            ]
+          },
+          {
+            "name": "evening",
+            "time": "16:00-18:00",
+            "purpose": "зарезервировано",
+            "activation_condition": "после стабильного введения каш (не ранее 6.5–7 месяцев)",
+            "rules": [
+              "только проверенные продукты",
+              "без новых продуктов",
+              "легкая пища (овощи или каша)"
+            ]
+          }
+        ]
+      },
+      "allowed_products": {
+        "vegetables": ["кабачок", "брокколи", "цветная капуста", "тыква"],
+        "cereals": ["гречневая", "рисовая", "кукурузная"],
+        "fruits": ["яблоко", "груша"]
+      },
+      "introduction_plan": [
+        {
+          "week": 1,
+          "focus": "введение гречневой каши",
+          "days": [
+            {
+              "day": 1,
+              "notes": "",
+              "morning": { "product": "гречневая каша", "amount_grams": 5 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 30 },
+                { "product": "брокколи", "amount_grams": 20 }
+              ]
+            },
+            {
+              "day": 2,
+              "notes": "",
+              "morning": { "product": "гречневая каша", "amount_grams": 10 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 25 },
+                { "product": "брокколи", "amount_grams": 25 }
+              ]
+            },
+            {
+              "day": 3,
+              "notes": "",
+              "morning": { "product": "гречневая каша", "amount_grams": 20 },
+              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+            },
+            {
+              "day": 4,
+              "notes": "",
+              "morning": { "product": "гречневая каша", "amount_grams": 30 },
+              "lunch": [{ "product": "кабачок", "amount_grams": 50 }]
+            },
+            {
+              "day": 5,
+              "notes": "",
+              "morning": { "product": "гречневая каша", "amount_grams": 40 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 25 },
+                { "product": "брокколи", "amount_grams": 25 }
+              ]
+            },
+            {
+              "day": 6,
+              "notes": "",
+              "morning": { "product": "гречневая каша", "amount_grams": 50 },
+              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+            },
+            {
+              "day": 7,
+              "notes": "",
+              "morning": { "product": "гречневая каша", "amount_grams": 60 },
+              "lunch": [{ "product": "кабачок", "amount_grams": 50 }]
+            }
+          ]
+        },
+        {
+          "week": 2,
+          "focus": "введение рисовой каши",
+          "notes": "гречка уже считается безопасной и может использоваться в обед",
+          "days": [
+            {
+              "day": 1,
+              "notes": "",
+              "morning": { "product": "рисовая каша", "amount_grams": 5 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 30 },
+                { "product": "брокколи", "amount_grams": 20 }
+              ]
+            },
+            {
+              "day": 2,
+              "notes": "",
+              "morning": { "product": "рисовая каша", "amount_grams": 10 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 25 },
+                { "product": "брокколи", "amount_grams": 25 }
+              ]
+            },
+            {
+              "day": 3,
+              "notes": "",
+              "morning": { "product": "рисовая каша", "amount_grams": 20 },
+              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+            },
+            {
+              "day": 4,
+              "notes": "",
+              "morning": { "product": "рисовая каша", "amount_grams": 30 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 25 },
+                { "product": "гречневая каша", "amount_grams": 25 }
+              ]
+            },
+            {
+              "day": 5,
+              "notes": "",
+              "morning": { "product": "рисовая каша", "amount_grams": 40 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 25 },
+                { "product": "брокколи", "amount_grams": 25 }
+              ]
+            },
+            {
+              "day": 6,
+              "notes": "",
+              "morning": { "product": "рисовая каша", "amount_grams": 50 },
+              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+            },
+            {
+              "day": 7,
+              "notes": "",
+              "morning": { "product": "рисовая каша", "amount_grams": 60 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 25 },
+                { "product": "гречневая каша", "amount_grams": 25 }
+              ]
+            }
+          ]
+        },
+        {
+          "week": 3,
+          "focus": "введение кукурузной каши",
+          "notes": "формирование ротации каш",
+          "days": [
+            {
+              "day": 1,
+              "notes": "",
+              "morning": { "product": "кукурузная каша", "amount_grams": 5 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 30 },
+                { "product": "брокколи", "amount_grams": 20 }
+              ]
+            },
+            {
+              "day": 2,
+              "notes": "",
+              "morning": { "product": "кукурузная каша", "amount_grams": 10 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 25 },
+                { "product": "гречневая каша", "amount_grams": 25 }
+              ]
+            },
+            {
+              "day": 3,
+              "notes": "",
+              "morning": { "product": "кукурузная каша", "amount_grams": 20 },
+              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+            },
+            {
+              "day": 4,
+              "notes": "",
+              "morning": { "product": "кукурузная каша", "amount_grams": 30 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 25 },
+                { "product": "рисовая каша", "amount_grams": 25 }
+              ]
+            },
+            {
+              "day": 5,
+              "notes": "",
+              "morning": { "product": "кукурузная каша", "amount_grams": 40 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 25 },
+                { "product": "брокколи", "amount_grams": 25 }
+              ]
+            },
+            {
+              "day": 6,
+              "notes": "",
+              "morning": { "product": "кукурузная каша", "amount_grams": 50 },
+              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+            },
+            {
+              "day": 7,
+              "notes": "",
+              "morning": { "product": "кукурузная каша", "amount_grams": 60 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 25 },
+                { "product": "гречневая каша", "amount_grams": 25 }
+              ]
+            }
+          ]
+        },
+        {
+          "week": 4,
+          "focus": "введение фруктов",
+          "conditions": ["все каши введены", "нет реакций"],
+          "notes": "фрукты не заменяют овощи",
+          "days": [
+            {
+              "day": 1,
+              "notes": "",
+              "morning": { "product": "яблоко", "amount_grams": 5 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 30 },
+                { "product": "гречневая каша", "amount_grams": 25 }
+              ]
+            },
+            {
+              "day": 2,
+              "notes": "",
+              "morning": { "product": "яблоко", "amount_grams": 10 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 25 },
+                { "product": "брокколи", "amount_grams": 25 }
+              ]
+            },
+            {
+              "day": 3,
+              "notes": "",
+              "morning": { "product": "яблоко", "amount_grams": 15 },
+              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+            },
+            {
+              "day": 4,
+              "notes": "",
+              "morning": { "product": "груша", "amount_grams": 5 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 25 },
+                { "product": "рисовая каша", "amount_grams": 25 }
+              ]
+            },
+            {
+              "day": 5,
+              "notes": "",
+              "morning": { "product": "груша", "amount_grams": 10 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 25 },
+                { "product": "брокколи", "amount_grams": 25 }
+              ]
+            },
+            {
+              "day": 6,
+              "notes": "",
+              "morning": { "product": "груша", "amount_grams": 20 },
+              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+            },
+            {
+              "day": 7,
+              "notes": "",
+              "morning": { "product": "яблоко", "amount_grams": 30 },
+              "lunch": [
+                { "product": "кабачок", "amount_grams": 25 },
+                { "product": "кукурузная каша", "amount_grams": 25 }
+              ]
+            }
+          ]
+        }
+      ],
+      "constraints": {
+        "max_volume_per_meal_grams": {
+          "5_months": 50,
+          "6_months": 80
+        },
+        "new_products_frequency_days": 3,
+        "max_new_products_per_week": 2
+      },
+      "hidden_risks": [
+        "ускоренное введение продуктов снижает выявляемость аллергии",
+        "смешивание новых и старых продуктов затрудняет диагностику",
+        "раннее введение фруктов может снизить интерес к овощам",
+        "замена грудного молока прикормом в 6 месяцев приводит к дефицитам"
+      ]
+    },
+    {
+      "month": 7,
+      "status": "planned",
+      "planned_additions": ["мясо", "желток", "расширение фруктов"],
+      "notes": "заполните структуру месяца по той же схеме, что и month 6"
+    }
+  ]
+}

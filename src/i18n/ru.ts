@@ -135,6 +135,8 @@ export const ru: Record<TranslationKey, string> = {
   statsTotalAmount: "Всего",
   statsFoodBreakdown: "По типам продуктов",
   statsPerFood: "По продуктам",
+  statsSwitchOverall: "Общая",
+  statsSwitchMonthly: "За месяц",
   statsDaysLabel: "дн.",
   statsDayShort: "день",
   statsMonth: "Месяц",
@@ -153,6 +155,9 @@ export const ru: Record<TranslationKey, string> = {
   remindersTitlePlaceholder: "Название (напр. Время кормления)",
   remindersTime: "Время",
   remindersSave: "Сохранить",
+  mealBreakfast: "Завтрак",
+  mealLunch: "Обед",
+  mealEvening: "Ужин",
 
   tabsHome: "Главная",
   tabsStats: "Статистика",

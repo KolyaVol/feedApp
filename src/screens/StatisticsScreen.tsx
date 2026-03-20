@@ -1,5 +1,12 @@
 import React, { useCallback, useMemo } from "react";
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  TouchableOpacity,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSchedule } from "../hooks/useSchedule";
@@ -27,7 +34,8 @@ export function StatisticsScreen() {
   const { t } = useLocale();
   const { colors } = useTheme();
   const styles = useLocalStyles(colors);
-  const { planDays, loading, refresh, progressDateStr } = useSchedule();
+  const { planDays, remoteDayPlans, loading, refresh, progressDateStr } = useSchedule();
+  const [statsView, setStatsView] = React.useState<"overall" | "monthly">("overall");
 
   const passedPlanDays = useMemo(() => {
     return planDays.filter((d) => d.date <= progressDateStr);
@@ -39,24 +47,68 @@ export function StatisticsScreen() {
     }, [refresh]),
   );
 
+  const normalizedStatsItems = useMemo(() => {
+    const remoteByDate = new Set(remoteDayPlans.map((d) => d.date));
+    const fromRemote = remoteDayPlans
+      .filter((d) => d.date <= progressDateStr)
+      .flatMap((d) =>
+        d.meals.map((meal) => ({
+          date: d.date,
+          sourceMonth: d.sourceMonth,
+          foodType: meal.product,
+          food: meal.product,
+          amountGrams: meal.amountGrams,
+        })),
+      );
+    const fromPlanDays = passedPlanDays
+      .filter((d) => !remoteByDate.has(d.date))
+      .map((d) => ({
+        date: d.date,
+        sourceMonth: d.sourceMonth,
+        foodType: d.foodType === "meal-plan" ? d.food : d.foodType,
+        food: d.food,
+        amountGrams: d.amountGrams,
+      }));
+    return [...fromRemote, ...fromPlanDays];
+  }, [passedPlanDays, progressDateStr, remoteDayPlans]);
+
+  const currentAppMonth = useMemo(() => {
+    const exact = passedPlanDays.find((d) => d.date === progressDateStr);
+    if (exact) return exact.sourceMonth;
+    const latestPassed = [...passedPlanDays].sort((a, b) => b.date.localeCompare(a.date))[0];
+    return latestPassed?.sourceMonth ?? null;
+  }, [passedPlanDays, progressDateStr]);
+
+  const scopedStatsItems = useMemo(() => {
+    if (statsView === "overall") return normalizedStatsItems;
+    if (currentAppMonth == null) return [];
+    return normalizedStatsItems.filter((d) => d.sourceMonth === currentAppMonth);
+  }, [currentAppMonth, normalizedStatsItems, statsView]);
+
+  const scopedPlanDays = useMemo(() => {
+    if (statsView === "overall") return passedPlanDays;
+    if (currentAppMonth == null) return [];
+    return passedPlanDays.filter((d) => d.sourceMonth === currentAppMonth);
+  }, [currentAppMonth, passedPlanDays, statsView]);
+
   const summary = useMemo(() => {
-    if (!passedPlanDays.length) return null;
-    const sortedDates = passedPlanDays.map((d) => d.date).sort();
-    const uniqueFoods = new Set(passedPlanDays.map((d) => d.food));
-    const uniqueFoodTypes = new Set(passedPlanDays.map((d) => d.foodType));
-    const totalGrams = passedPlanDays.reduce((s, d) => s + d.amountGrams, 0);
+    if (!scopedStatsItems.length) return null;
+    const sortedDates = scopedStatsItems.map((d) => d.date).sort();
+    const uniqueFoods = new Set(scopedStatsItems.map((d) => d.food));
+    const uniqueFoodTypes = new Set(scopedStatsItems.map((d) => d.foodType));
+    const totalGrams = scopedStatsItems.reduce((s, d) => s + d.amountGrams, 0);
     return {
-      totalDays: passedPlanDays.length,
+      totalDays: new Set(scopedStatsItems.map((d) => d.date)).size,
       dateRange: `${formatShort(sortedDates[0])} — ${formatShort(sortedDates[sortedDates.length - 1])}`,
       foodsCount: uniqueFoods.size,
       foodTypesCount: uniqueFoodTypes.size,
       totalGrams,
     };
-  }, [passedPlanDays]);
+  }, [scopedStatsItems]);
 
   const chartData: AggregatedFood[] = useMemo(() => {
     const byType: Record<string, number> = {};
-    for (const d of passedPlanDays) {
+    for (const d of scopedStatsItems) {
       byType[d.foodType] = (byType[d.foodType] ?? 0) + d.amountGrams;
     }
     return Object.entries(byType)
@@ -68,11 +120,11 @@ export function StatisticsScreen() {
         amount,
       }))
       .sort((a, b) => b.amount - a.amount);
-  }, [passedPlanDays, t]);
+  }, [scopedStatsItems, t]);
 
   const perFoodStats = useMemo(() => {
     const map: Record<string, { total: number; days: number }> = {};
-    for (const d of passedPlanDays) {
+    for (const d of scopedStatsItems) {
       if (!map[d.food]) map[d.food] = { total: 0, days: 0 };
       map[d.food].total += d.amountGrams;
       map[d.food].days += 1;
@@ -85,14 +137,14 @@ export function StatisticsScreen() {
         avg: Math.round(total / days),
       }))
       .sort((a, b) => b.total - a.total);
-  }, [passedPlanDays]);
+  }, [scopedStatsItems]);
 
   const weeklyBreakdown = useMemo(() => {
     const weeks: Record<
       string,
-      { weekNum: number; month: number; days: typeof passedPlanDays }
+      { weekNum: number; month: number; days: typeof scopedPlanDays }
     > = {};
-    for (const d of passedPlanDays) {
+    for (const d of scopedPlanDays) {
       const key = `${d.sourceMonth}-${d.weekNumber}`;
       if (!weeks[key])
         weeks[key] = { weekNum: d.weekNumber, month: d.sourceMonth, days: [] };
@@ -101,7 +153,7 @@ export function StatisticsScreen() {
     return Object.values(weeks).sort(
       (a, b) => a.month - b.month || a.weekNum - b.weekNum,
     );
-  }, [passedPlanDays]);
+  }, [scopedPlanDays]);
 
   const totalGrams = useMemo(
     () => chartData.reduce((s, d) => s + d.amount, 0),
@@ -121,6 +173,40 @@ export function StatisticsScreen() {
       <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>
         {t("statsScreenTitle")}
       </Text>
+      <View style={styles.switchWrap}>
+        <TouchableOpacity
+          style={[
+            styles.switchButton,
+            statsView === "overall" && { backgroundColor: colors.primary },
+          ]}
+          onPress={() => setStatsView("overall")}
+        >
+          <Text
+            style={[
+              styles.switchButtonText,
+              statsView === "overall" && styles.switchButtonTextActive,
+            ]}
+          >
+            {t("statsSwitchOverall")}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.switchButton,
+            statsView === "monthly" && { backgroundColor: colors.primary },
+          ]}
+          onPress={() => setStatsView("monthly")}
+        >
+          <Text
+            style={[
+              styles.switchButtonText,
+              statsView === "monthly" && styles.switchButtonTextActive,
+            ]}
+          >
+            {t("statsSwitchMonthly")}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {!summary ? (
         <View style={g.emptyBox}>
@@ -269,6 +355,31 @@ function useLocalStyles(colors: {
           fontWeight: "600",
           color: colors.text,
           fontFamily: fonts.semiBold,
+        },
+        switchWrap: {
+          marginHorizontal: spacing.screenPadding,
+          marginBottom: 16,
+          backgroundColor: colors.card,
+          borderRadius: spacing.radiusLg,
+          padding: 6,
+          flexDirection: "row",
+          gap: 8,
+        },
+        switchButton: {
+          flex: 1,
+          borderRadius: spacing.radiusMd,
+          paddingVertical: 12,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: colors.chipBg,
+        },
+        switchButtonText: {
+          fontSize: 15,
+          color: colors.textMuted,
+          fontFamily: fonts.semiBold,
+        },
+        switchButtonTextActive: {
+          color: "#fff",
         },
         capitalize: { textTransform: "capitalize" },
         weekCard: {

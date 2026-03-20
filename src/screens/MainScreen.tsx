@@ -33,6 +33,8 @@ export function MainScreen() {
     loading,
     refresh,
     todayPlan,
+    remoteToday,
+    remoteDayPlans,
     getScheduleForDay,
     progressDateStr,
     updateAllPlanDaysTime,
@@ -76,6 +78,28 @@ export function MainScreen() {
     const diffDays = Math.floor((cur - start) / 86400000);
     return diffDays + 1;
   }, [plan, schedule]);
+
+  const orderedMeals = useMemo(() => {
+    const dayPlan = remoteDayPlans.find((d) => d.date === progressDateStr);
+    if (!dayPlan?.meals?.length) return [];
+    const order = { morning: 0, lunch: 1, evening: 2 } as const;
+    return [...dayPlan.meals]
+      .map((meal) => ({
+        type: meal.mealType,
+        items: [{ product: meal.product, amount_grams: meal.amountGrams }],
+        time: undefined as string | undefined,
+      }))
+      .sort((a, b) => order[a.type] - order[b.type]);
+  }, [progressDateStr, remoteDayPlans]);
+
+  const mealLabel = useCallback(
+    (type: "morning" | "lunch" | "evening") => {
+      if (type === "morning") return t("mealBreakfast");
+      if (type === "lunch") return t("mealLunch");
+      return t("mealEvening");
+    },
+    [t],
+  );
 
   const todayStr = useMemo(() => {
     const now = new Date(progressDateStr + "T00:00:00");
@@ -125,7 +149,7 @@ export function MainScreen() {
     );
   }
 
-  if (!plan) {
+  if (!plan && !remoteToday) {
     return (
       <ScrollView style={g.screenContainer} contentContainerStyle={g.screenContent}>
         <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>
@@ -170,29 +194,51 @@ export function MainScreen() {
         </View>
       ) : null}
 
-      <View style={styles.mainCard}>
-        <Text style={styles.foodTypeLabel}>{plan.foodType}</Text>
-        <Text style={styles.foodName}>{plan.food}</Text>
-        <View style={styles.detailsRow}>
-          <View style={styles.detailBadge}>
-            <Text style={styles.detailBadgeText}>
-              {plan.amountGrams}{t("mainGrams")}
-            </Text>
+      {orderedMeals.length ? (
+        orderedMeals.map((meal) => (
+          <View key={meal.type} style={styles.mainCard}>
+            <Text style={styles.foodTypeLabel}>{mealLabel(meal.type)}</Text>
+            <Text style={styles.foodName}>{meal.items.map((x) => x.product).join(" + ")}</Text>
+            <View style={styles.detailsRow}>
+              <View style={styles.detailBadge}>
+                <Text style={styles.detailBadgeText}>
+                  {meal.items.reduce((s, x) => s + x.amount_grams, 0)}
+                  {t("mainGrams")}
+                </Text>
+              </View>
+              {meal.time ? (
+                <View style={styles.detailBadge}>
+                  <Text style={styles.detailBadgeText}>⏰ {meal.time}</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
-          <View style={styles.detailBadge}>
-            <TouchableOpacity onPress={openChangeAllDaysTime}>
-              <Text style={styles.detailBadgeText}>⏰ {plan.time}</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.detailBadge}>
-            <Text style={styles.detailBadgeText}>
-              {t("mainWeek")} {plan.weekNumber}
-            </Text>
+        ))
+      ) : (
+        <View style={styles.mainCard}>
+          <Text style={styles.foodTypeLabel}>{plan?.foodType}</Text>
+          <Text style={styles.foodName}>{plan?.food}</Text>
+          <View style={styles.detailsRow}>
+            <View style={styles.detailBadge}>
+              <Text style={styles.detailBadgeText}>
+                {plan?.amountGrams}{t("mainGrams")}
+              </Text>
+            </View>
+            <View style={styles.detailBadge}>
+              <TouchableOpacity onPress={openChangeAllDaysTime}>
+                <Text style={styles.detailBadgeText}>⏰ {plan?.time}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.detailBadge}>
+              <Text style={styles.detailBadgeText}>
+                {t("mainWeek")} {plan?.weekNumber}
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
+      )}
 
-      {!hideSubstitutions && plan.substitutions.length > 0 && (
+      {!hideSubstitutions && plan && plan.substitutions.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("mainSubstitutions")}</Text>
           <View style={styles.chipsRow}>
@@ -205,7 +251,7 @@ export function MainScreen() {
         </View>
       )}
 
-      {plan.notes ? (
+      {plan?.notes ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("mainNotes")}</Text>
           <View style={styles.noteCard}>
@@ -214,7 +260,16 @@ export function MainScreen() {
         </View>
       ) : null}
 
-      {safetyTip ? (
+      {remoteToday?.advice?.length ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t("mainSafetyTip")}</Text>
+          <View style={styles.tipCard}>
+            {remoteToday.advice.slice(0, 2).map((tip, idx) => (
+              <Text key={`${idx}-${tip}`} style={styles.tipText}>💡 {tip}</Text>
+            ))}
+          </View>
+        </View>
+      ) : safetyTip ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("mainSafetyTip")}</Text>
           <View style={styles.tipCard}>

@@ -133,6 +133,8 @@ export const en = {
   statsTotalAmount: "Total",
   statsFoodBreakdown: "Food type breakdown",
   statsPerFood: "Per food",
+  statsSwitchOverall: "Overall",
+  statsSwitchMonthly: "Monthly",
   statsDaysLabel: "days",
   statsDayShort: "day",
   statsMonth: "Month",
@@ -151,6 +153,9 @@ export const en = {
   remindersTitlePlaceholder: "Title (e.g. Feed time)",
   remindersTime: "Time",
   remindersSave: "Save",
+  mealBreakfast: "Breakfast",
+  mealLunch: "Lunch",
+  mealEvening: "Evening",
 
   tabsHome: "Home",
   tabsStats: "Stats",

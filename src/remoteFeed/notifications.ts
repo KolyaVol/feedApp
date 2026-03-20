@@ -6,7 +6,7 @@ import { requestPermissions } from "../notifications/schedule";
 const REMOTE_FEED_TAG = "remote-feed-meal";
 
 function parseTime(time: string): { hour: number; minute: number } | null {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+  const m = /^(\d{1,2}):(\d{2})/.exec(time.trim());
   if (!m) return null;
   const hour = Number(m[1]);
   const minute = Number(m[2]);
@@ -42,9 +42,13 @@ export async function scheduleMealsFromFeedData(
     await cancelAllRemoteFeedNotifications();
 
     for (const meal of today.meals) {
+      if (!meal.time) continue;
       const parsedTime = parseTime(meal.time);
       if (!parsedTime) continue;
-      const body = meal.notes ? `${meal.food} — ${meal.notes}` : meal.food;
+      const foods = meal.items.map((x) => x.product).join(", ");
+      const advice = today.advice?.[0];
+      const bodyBase = meal.notes ? `${foods} — ${meal.notes}` : foods;
+      const body = advice ? `${bodyBase}\n💡 ${advice}` : bodyBase;
 
       await Notifications.scheduleNotificationAsync({
         content: { title: "Feeding time", body, data: { tag: REMOTE_FEED_TAG } },

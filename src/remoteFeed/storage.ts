@@ -8,7 +8,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function isSchedule(v: unknown): v is RemoteFeedSchedule {
   if (!isRecord(v)) return false;
-  return typeof v.month === "number" && Array.isArray(v.weekly_schedule);
+  return typeof v.month === "number" && Array.isArray(v.introduction_plan);
 }
 
 export async function saveCachedJson(data: RemoteFeedSchedule): Promise<void> {

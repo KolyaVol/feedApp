@@ -1,35 +1,61 @@
+export type RemoteMealType = "morning" | "lunch" | "evening";
+
+export interface RemoteFeedSlot {
+  name: RemoteMealType;
+  time: string;
+  purpose?: string;
+  rules?: string[];
+  activation_condition?: string;
+}
+
+export interface RemoteFeedDayMeal {
+  product: string;
+  amount_grams: number;
+}
+
+export interface RemoteFeedPlanDay {
+  day: number;
+  notes?: string;
+  morning?: RemoteFeedDayMeal;
+  lunch?: RemoteFeedDayMeal[];
+  evening?: RemoteFeedDayMeal[];
+}
+
+export interface RemoteFeedPlanWeek {
+  week: number;
+  focus?: string;
+  notes?: string;
+  days: RemoteFeedPlanDay[];
+}
+
 export interface RemoteFeedSchedule {
   month: number;
-  signs_of_readiness?: string[];
-  safety_guidelines?: string[];
-  weekly_schedule: RemoteFeedWeek[];
-}
-
-export interface RemoteFeedWeek {
-  week: number;
-  days: RemoteFeedDay[];
-}
-
-export interface RemoteFeedDay {
-  day: number;
-  time: string;
-  food_type: string;
-  food: string;
-  amount_grams: number;
-  substitutions?: string[];
-  notes?: string;
+  breastfeeding?: {
+    on_demand?: boolean;
+    priority?: string;
+    rules?: string[];
+  };
+  feeding_schedule?: {
+    meal_slots?: RemoteFeedSlot[];
+  };
+  introduction_plan: RemoteFeedPlanWeek[];
+  hidden_risks?: string[];
 }
 
 export interface RemoteFeedMeal {
-  time: string;
-  food: string;
+  type: RemoteMealType;
+  title: string;
+  time?: string;
+  items: RemoteFeedDayMeal[];
+  rules: string[];
   notes?: string;
-  foodType?: string;
-  amountGrams?: number;
 }
 
 export interface RemoteFeedToday {
-  date: string; // YYYY-MM-DD
+  date: string;
+  week: number;
+  day: number;
   meals: RemoteFeedMeal[];
+  advice: string[];
 }
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
-import type { PlanDay, LoadedSchedule } from "../types";
+import type { DayPlan, PlanDay, LoadedSchedule } from "../types";
 import {
   getPlanDays,
   setPlanDays,
@@ -27,9 +27,24 @@ import {
 
 interface ScheduleJson {
   month: number;
-  signs_of_readiness?: string[];
-  safety_guidelines?: string[];
-  weekly_schedule: {
+  breastfeeding?: {
+    rules?: string[];
+  };
+  feeding_schedule?: {
+    meal_slots?: { name: "morning" | "lunch" | "evening"; time: string; rules?: string[] }[];
+  };
+  hidden_risks?: string[];
+  introduction_plan?: {
+    week: number;
+    days: {
+      day: number;
+      notes?: string;
+      morning?: { product: string; amount_grams: number };
+      lunch?: { product: string; amount_grams: number }[];
+      evening?: { product: string; amount_grams: number }[];
+    }[];
+  }[];
+  weekly_schedule?: {
     week: number;
     days: {
       day: number;
@@ -41,6 +56,15 @@ interface ScheduleJson {
       notes?: string;
     }[];
   }[];
+  months?: ScheduleJson[];
+}
+
+let sharedProgressDateStr: string | null = null;
+const progressDateListeners = new Set<(value: string) => void>();
+
+function publishProgressDate(value: string) {
+  sharedProgressDateStr = value;
+  for (const listener of progressDateListeners) listener(value);
 }
 
 export function useSchedule() {
@@ -48,16 +72,28 @@ export function useSchedule() {
   const [planDays, setPlanDaysState] = useState<PlanDay[]>([]);
   const [schedules, setSchedules] = useState<LoadedSchedule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [progressDateStr, setProgressDateStr] = useState(() => formatDateStr(new Date()));
+  const [progressDateStr, setProgressDateStr] = useState(() => {
+    if (sharedProgressDateStr) return sharedProgressDateStr;
+    const today = formatDateStr(new Date());
+    sharedProgressDateStr = today;
+    return today;
+  });
+
+  useEffect(() => {
+    const listener = (value: string) => setProgressDateStr(value);
+    progressDateListeners.add(listener);
+    return () => {
+      progressDateListeners.delete(listener);
+    };
+  }, []);
 
   useEffect(() => {
     AsyncStorage.getItem(KEYS.PROGRESS_DATE).then((stored) => {
       const realToday = formatDateStr(new Date());
       const validStored = stored && /^\d{4}-\d{2}-\d{2}$/.test(stored);
-      const toUse =
-        validStored && stored >= realToday ? stored : realToday;
+      const toUse = validStored ? stored : realToday;
       if (toUse !== stored) AsyncStorage.setItem(KEYS.PROGRESS_DATE, toUse);
-      setProgressDateStr(toUse);
+      publishProgressDate(toUse);
     });
   }, []);
 
@@ -66,22 +102,21 @@ export function useSchedule() {
       AsyncStorage.getItem(KEYS.PROGRESS_DATE).then((stored) => {
         const realToday = formatDateStr(new Date());
         const validStored = stored && /^\d{4}-\d{2}-\d{2}$/.test(stored);
-        const toUse =
-          validStored && stored >= realToday ? stored : realToday;
+        const toUse = validStored ? stored : realToday;
         if (toUse !== stored) AsyncStorage.setItem(KEYS.PROGRESS_DATE, toUse);
-        setProgressDateStr(toUse);
+        publishProgressDate(toUse);
       });
     }, []),
   );
 
   const setProgressDate = useCallback((dateStr: string) => {
-    setProgressDateStr(dateStr);
+    publishProgressDate(dateStr);
     AsyncStorage.setItem(KEYS.PROGRESS_DATE, dateStr);
   }, []);
 
   const resetProgressDate = useCallback(() => {
     const today = formatDateStr(new Date());
-    setProgressDateStr(today);
+    publishProgressDate(today);
     AsyncStorage.removeItem(KEYS.PROGRESS_DATE);
   }, []);
 
@@ -89,6 +124,25 @@ export function useSchedule() {
     if (!remote?.schedule || !remote.startDate) return [];
     return remoteScheduleToPlanDays(remote.schedule, remote.startDate);
   }, [remote?.schedule, remote?.startDate]);
+  const remoteDayPlans = useMemo((): DayPlan[] => {
+    if (!remote?.schedule || !remote.startDate) return [];
+    const start = remote.startDate;
+    const weeks = remote.schedule.introduction_plan ?? [];
+    let index = 0;
+    const out: DayPlan[] = [];
+    for (const w of weeks) {
+      for (const d of w.days) {
+        const date = addDays(start, index++);
+        const meals: DayPlan["meals"] = [];
+        if (d.morning) meals.push({ mealType: "morning", product: d.morning.product, amountGrams: d.morning.amount_grams });
+        for (const m of d.lunch ?? []) meals.push({ mealType: "lunch", product: m.product, amountGrams: m.amount_grams });
+        for (const m of d.evening ?? []) meals.push({ mealType: "evening", product: m.product, amountGrams: m.amount_grams });
+        out.push({ date, weekNumber: w.week, dayNumber: d.day, notes: d.notes, meals, sourceMonth: remote.schedule.month });
+      }
+    }
+    return out;
+  }, [remote?.schedule, remote?.startDate]);
+  const remoteToday = useMemo(() => remote?.today ?? null, [remote?.today]);
 
   const remoteLoadedSchedule = useMemo((): LoadedSchedule | null => {
     if (!remote?.schedule || !remote.startDate || !remotePlanDays.length) return null;
@@ -99,8 +153,8 @@ export function useSchedule() {
       month: remote.schedule.month,
       startDate,
       endDate,
-      signsOfReadiness: remote.schedule.signs_of_readiness ?? [],
-      safetyGuidelines: remote.schedule.safety_guidelines ?? [],
+      signsOfReadiness: remote.schedule.breastfeeding?.rules ?? [],
+      safetyGuidelines: remote.schedule.hidden_risks ?? [],
       loadedAt: "",
     };
   }, [remote?.schedule, remote?.startDate, remotePlanDays]);
@@ -148,9 +202,14 @@ export function useSchedule() {
   const loadJson = useCallback(
     async (content: string): Promise<void> => {
       const json: ScheduleJson = JSON.parse(content);
-      if (!json.weekly_schedule?.length) {
+      const source =
+        json.introduction_plan?.length || json.weekly_schedule?.length
+          ? json
+          : json.months?.find((m) => m.introduction_plan?.length || m.weekly_schedule?.length);
+      if (!source) {
         throw new Error("Invalid schedule format");
       }
+      const hasNew = !!source.introduction_plan?.length;
 
       const existingDays = await getPlanDays();
       let startDate: string;
@@ -167,23 +226,48 @@ export function useSchedule() {
       const newDays: PlanDay[] = [];
       let dayIndex = 0;
 
-      for (const week of json.weekly_schedule) {
-        for (const day of week.days) {
-          const date = addDays(startDate, dayIndex);
-          newDays.push({
-            id: generateId(),
-            date,
-            time: day.time,
-            foodType: day.food_type,
-            food: day.food,
-            amountGrams: day.amount_grams,
-            substitutions: day.substitutions ?? [],
-            notes: day.notes,
-            sourceMonth: json.month,
-            weekNumber: week.week,
-            scheduleId,
-          });
-          dayIndex++;
+      if (hasNew && source.introduction_plan) {
+        const time = source.feeding_schedule?.meal_slots?.find((s) => s.name === "morning")?.time ?? "09:00";
+        for (const week of source.introduction_plan) {
+          for (const day of week.days) {
+            const date = addDays(startDate, dayIndex);
+            const primary = day.morning ?? day.lunch?.[0] ?? day.evening?.[0];
+            if (!primary) continue;
+            newDays.push({
+              id: generateId(),
+              date,
+              time,
+              foodType: "meal-plan",
+              food: primary.product,
+              amountGrams: primary.amount_grams,
+              substitutions: [],
+              notes: day.notes,
+              sourceMonth: source.month,
+              weekNumber: week.week,
+              scheduleId,
+            });
+            dayIndex++;
+          }
+        }
+      } else if (source.weekly_schedule) {
+        for (const week of source.weekly_schedule) {
+          for (const day of week.days) {
+            const date = addDays(startDate, dayIndex);
+            newDays.push({
+              id: generateId(),
+              date,
+              time: day.time,
+              foodType: day.food_type,
+              food: day.food,
+              amountGrams: day.amount_grams,
+              substitutions: day.substitutions ?? [],
+              notes: day.notes,
+              sourceMonth: source.month,
+              weekNumber: week.week,
+              scheduleId,
+            });
+            dayIndex++;
+          }
         }
       }
 
@@ -191,11 +275,11 @@ export function useSchedule() {
 
       const schedule: LoadedSchedule = {
         id: scheduleId,
-        month: json.month,
+        month: source.month,
         startDate,
         endDate,
-        signsOfReadiness: json.signs_of_readiness ?? [],
-        safetyGuidelines: json.safety_guidelines ?? [],
+        signsOfReadiness: source.breastfeeding?.rules ?? [],
+        safetyGuidelines: source.hidden_risks ?? [],
         loadedAt: new Date().toISOString(),
       };
 
@@ -261,6 +345,8 @@ export function useSchedule() {
     setProgressDate,
     resetProgressDate,
     todayPlan,
+    remoteToday,
+    remoteDayPlans,
     tomorrowPlan,
     getScheduleForDay,
     loadJson,

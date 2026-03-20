@@ -53,6 +53,56 @@ function dayIndexFromStart(startDateStr: string, dateStr: string): number {
   return diffDays + 1;
 }
 
+type MealDraftMeta = {
+  notes: string;
+  lunchFood: string;
+  lunchAmount: string;
+  eveningFood: string;
+  eveningAmount: string;
+};
+
+function parseMealMeta(notes?: string): MealDraftMeta {
+  const raw = notes ?? "";
+  const lines = raw.split("\n");
+  let lunchFood = "";
+  let lunchAmount = "";
+  let eveningFood = "";
+  let eveningAmount = "";
+  const clean: string[] = [];
+  for (const line of lines) {
+    if (line.startsWith("__lunch=")) {
+      const [f, a] = line.replace("__lunch=", "").split("|");
+      lunchFood = (f ?? "").trim();
+      lunchAmount = (a ?? "").trim();
+      continue;
+    }
+    if (line.startsWith("__evening=")) {
+      const [f, a] = line.replace("__evening=", "").split("|");
+      eveningFood = (f ?? "").trim();
+      eveningAmount = (a ?? "").trim();
+      continue;
+    }
+    clean.push(line);
+  }
+  return { notes: clean.join("\n").trim(), lunchFood, lunchAmount, eveningFood, eveningAmount };
+}
+
+function mealFromDay(day: { meals?: Array<{ mealType: string; product: string; amountGrams: number }> } | undefined, type: "lunch" | "evening") {
+  if (!day?.meals?.length) return { product: "", amount: "" };
+  const first = day.meals.find((m) => m.mealType === type);
+  if (!first) return { product: "", amount: "" };
+  return { product: first.product, amount: String(first.amountGrams) };
+}
+
+function buildMealMeta(meta: MealDraftMeta): string | undefined {
+  const lines: string[] = [];
+  if (meta.lunchFood || meta.lunchAmount) lines.push(`__lunch=${meta.lunchFood}|${meta.lunchAmount}`);
+  if (meta.eveningFood || meta.eveningAmount) lines.push(`__evening=${meta.eveningFood}|${meta.eveningAmount}`);
+  if (meta.notes.trim()) lines.push(meta.notes.trim());
+  const out = lines.join("\n").trim();
+  return out || undefined;
+}
+
 function listChangedFields(params: {
   originalById: Record<string, PlanDay>;
   draftById: Record<string, PlanDay>;
@@ -263,7 +313,7 @@ export function LoadDataScreen() {
   const remote = useRemoteFeedContext();
   const styles = useLocalStyles(colors);
 
-  const { schedules, loading, refresh, getDaysForSchedule, todayPlan, progressDateStr, setProgressDate } = useSchedule();
+  const { schedules, loading, refresh, getDaysForSchedule, todayPlan, progressDateStr, setProgressDate, remoteDayPlans } = useSchedule();
 
   const availableSchedules = schedules;
 
@@ -664,6 +714,20 @@ export function LoadDataScreen() {
                 const amountParsed = parseInt(amountText, 10);
                 const amountBad = !amountText.trim() || isNaN(amountParsed) || amountParsed < 0;
                 const isProgress = d.date === progressDayStr;
+                const remoteDay = d.scheduleId === "remote" ? remoteDayPlans.find((x) => x.date === d.date) : undefined;
+                const lunchExisting = mealFromDay(remoteDay, "lunch");
+                const eveningExisting = mealFromDay(remoteDay, "evening");
+                const parsedMeta = parseMealMeta(d.notes);
+                const mealMeta: MealDraftMeta = {
+                  ...parsedMeta,
+                  lunchFood: parsedMeta.lunchFood || lunchExisting.product,
+                  lunchAmount: parsedMeta.lunchAmount || lunchExisting.amount,
+                  eveningFood: parsedMeta.eveningFood || eveningExisting.product,
+                  eveningAmount: parsedMeta.eveningAmount || eveningExisting.amount,
+                };
+                const hasBreakfast = !!(d.food || amountText.trim());
+                const hasLunch = !!(mealMeta.lunchFood || mealMeta.lunchAmount);
+                const hasEvening = !!(mealMeta.eveningFood || mealMeta.eveningAmount);
                 return (
                   <View
                     key={d.id}
@@ -694,20 +758,16 @@ export function LoadDataScreen() {
                     </View>
 
                     <View style={styles.fieldsWrap}>
-                      <View style={[styles.field, styles.fieldHalf]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("loadDataColTime")}</Text>
+                      {hasBreakfast ? (
+                      <View style={[styles.field, styles.fieldFull]}>
+                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("mealBreakfast")}</Text>
                         <TextInput
                           style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
-                          value={d.time}
-                          onChangeText={(v) => updateDay(d.id, { time: v })}
+                          value={d.food}
+                          onChangeText={(v) => updateDay(d.id, { food: v })}
+                          placeholder={t("loadDataColFood")}
                           placeholderTextColor={colors.placeholder}
                         />
-                      </View>
-
-                      <View style={[styles.field, styles.fieldHalf]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
-                          {t("loadDataColAmount")}, {t("loadDataGrams")}
-                        </Text>
                         <View style={styles.amountRow}>
                           <TextInput
                             style={[
@@ -718,57 +778,75 @@ export function LoadDataScreen() {
                             value={amountText}
                             onChangeText={(v) => setAmountTextById((prev) => ({ ...prev, [d.id]: v }))}
                             keyboardType="numeric"
+                            placeholder={`${t("loadDataColAmount")} (${t("loadDataGrams")})`}
                             placeholderTextColor={colors.placeholder}
                           />
                         </View>
                       </View>
+                      ) : null}
 
+                      {hasLunch ? (
                       <View style={[styles.field, styles.fieldFull]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("loadDataColType")}</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("mealLunch")}</Text>
                         <TextInput
-                          style={[styles.fieldInput, styles.fieldMultiline, { borderColor: colors.borderLight, color: colors.text }]}
-                          value={d.foodType}
-                          onChangeText={(v) => updateDay(d.id, { foodType: v })}
+                          style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
+                          value={mealMeta.lunchFood}
+                          onChangeText={(v) =>
+                            updateDay(d.id, {
+                              notes: buildMealMeta({ ...mealMeta, lunchFood: v }),
+                            })
+                          }
+                          placeholder={t("loadDataColFood")}
                           placeholderTextColor={colors.placeholder}
-                          multiline
-                          textAlignVertical="top"
                         />
+                        <View style={styles.amountRow}>
+                          <TextInput
+                            style={[styles.fieldInput, styles.amountInput, { borderColor: colors.borderLight, color: colors.text }]}
+                            value={mealMeta.lunchAmount}
+                            onChangeText={(v) =>
+                              updateDay(d.id, {
+                                notes: buildMealMeta({ ...mealMeta, lunchAmount: v }),
+                              })
+                            }
+                            keyboardType="numeric"
+                            placeholder={`${t("loadDataColAmount")} (${t("loadDataGrams")})`}
+                            placeholderTextColor={colors.placeholder}
+                          />
+                        </View>
                       </View>
+                      ) : null}
 
-                      <View style={[styles.field, styles.fieldHalf]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("loadDataColFood")}</Text>
-                        <TextInput
-                          style={[styles.fieldInput, styles.fieldMultiline, { borderColor: colors.borderLight, color: colors.text }]}
-                          value={d.food}
-                          onChangeText={(v) => updateDay(d.id, { food: v })}
-                          placeholderTextColor={colors.placeholder}
-                          multiline
-                          textAlignVertical="top"
-                        />
-                      </View>
-
+                      {hasEvening ? (
                       <View style={[styles.field, styles.fieldFull]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("loadDataColSubs")}</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("mealEvening")}</Text>
                         <TextInput
-                          style={[styles.fieldInput, styles.fieldMultiline, { borderColor: colors.borderLight, color: colors.text }]}
-                          value={subsTextById[d.id] ?? d.substitutions.join(", ")}
-                          onChangeText={(v) => setSubsTextById((prev) => ({ ...prev, [d.id]: v }))}
+                          style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
+                          value={mealMeta.eveningFood}
+                          onChangeText={(v) =>
+                            updateDay(d.id, {
+                              notes: buildMealMeta({ ...mealMeta, eveningFood: v }),
+                            })
+                          }
+                          placeholder={t("loadDataColFood")}
                           placeholderTextColor={colors.placeholder}
-                          multiline
-                          textAlignVertical="top"
                         />
+                        <View style={styles.amountRow}>
+                          <TextInput
+                            style={[styles.fieldInput, styles.amountInput, { borderColor: colors.borderLight, color: colors.text }]}
+                            value={mealMeta.eveningAmount}
+                            onChangeText={(v) =>
+                              updateDay(d.id, {
+                                notes: buildMealMeta({ ...mealMeta, eveningAmount: v }),
+                              })
+                            }
+                            keyboardType="numeric"
+                            placeholder={`${t("loadDataColAmount")} (${t("loadDataGrams")})`}
+                            placeholderTextColor={colors.placeholder}
+                          />
+                        </View>
                       </View>
+                      ) : null}
 
-                      <View style={[styles.field, styles.fieldFull]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("loadDataColNotes")}</Text>
-                        <TextInput
-                          style={[styles.fieldInput, styles.fieldMultiline, { borderColor: colors.borderLight, color: colors.text }]}
-                          value={d.notes ?? ""}
-                          onChangeText={(v) => updateDay(d.id, { notes: v || undefined })}
-                          placeholderTextColor={colors.placeholder}
-                          multiline
-                        />
-                      </View>
                     </View>
                   </View>
                 );
