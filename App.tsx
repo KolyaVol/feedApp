@@ -16,7 +16,6 @@ import { MainScreen } from "./src/screens/MainScreen";
 import { StatisticsScreen } from "./src/screens/StatisticsScreen";
 import { LoadDataScreen } from "./src/screens/LoadDataScreen";
 import { CalculatorScreen } from "./src/screens/CalculatorScreen";
-import { RemoteFeedScreen } from "./src/screens/RemoteFeedScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ThemeProvider, useTheme } from "./src/contexts/ThemeContext";
 import { LocaleProvider, useLocale } from "./src/contexts/LocaleContext";
@@ -52,12 +51,6 @@ const TAB_CONFIG: {
     labelKey: "tabsCalc",
     titleKey: "screenTitlesCalculator",
     component: CalculatorScreen,
-  },
-  {
-    name: "RemoteFeed",
-    labelKey: "tabsRemote",
-    titleKey: "screenTitlesRemoteFeed",
-    component: RemoteFeedScreen,
   },
   {
     name: "Settings",

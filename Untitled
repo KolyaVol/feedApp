@@ -1,0 +1,8 @@
+EXPO_PUBLIC_REMOTE_FEED_URL=https://raw.githubusercontent.com/KolyaVol/feedData/master/data.json
+
+GITHUB_API_BASE=https://api.github.com
+GITHUB_OWNER=KolyaVol
+GITHUB_REPO=feedData
+GITHUB_BRANCH=master
+GITHUB_DATA_JSON_PATH=data.json
+GITHUB_TOKEN=

@@ -29,6 +29,7 @@ export function MainScreen() {
     refresh,
     todayPlan,
     getScheduleForDay,
+    progressDateStr,
   } = useSchedule();
 
   const tipPickedRef = useRef(false);
@@ -60,13 +61,13 @@ export function MainScreen() {
   const schedule = plan ? getScheduleForDay(plan) : undefined;
 
   const todayStr = useMemo(() => {
-    const now = new Date();
+    const now = new Date(progressDateStr + "T00:00:00");
     return now.toLocaleDateString(undefined, {
       weekday: "long",
       day: "numeric",
       month: "long",
     });
-  }, []);
+  }, [progressDateStr]);
 
   if (loading) {
     return (

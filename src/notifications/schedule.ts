@@ -2,6 +2,8 @@ import * as Notifications from "expo-notifications";
 import type { Reminder } from "../types";
 import { getReminders } from "../data/reminders";
 import { getPlanDays, formatDateStr, addDays, getPlanDayForDate } from "../data/planDays";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { KEYS } from "../data/storageKeys";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -77,7 +79,8 @@ export async function scheduleDailyPlanNotification(): Promise<void> {
   }
 
   const days = await getPlanDays();
-  const tomorrowStr = addDays(formatDateStr(new Date()), 1);
+  const base = (await AsyncStorage.getItem(KEYS.PROGRESS_DATE)) || formatDateStr(new Date());
+  const tomorrowStr = addDays(base, 1);
   const tomorrowPlan = getPlanDayForDate(days, tomorrowStr);
 
   if (!tomorrowPlan) return;

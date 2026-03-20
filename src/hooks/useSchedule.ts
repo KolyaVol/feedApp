@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { PlanDay, LoadedSchedule } from "../types";
 import {
   getPlanDays,
@@ -10,6 +11,7 @@ import {
   formatDateStr,
   addDays,
 } from "../data/planDays";
+import { KEYS } from "../data/storageKeys";
 import {
   getLoadedSchedules,
   addLoadedSchedule,
@@ -44,6 +46,24 @@ export function useSchedule() {
   const [planDays, setPlanDaysState] = useState<PlanDay[]>([]);
   const [schedules, setSchedules] = useState<LoadedSchedule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [progressDateStr, setProgressDateStr] = useState(() => formatDateStr(new Date()));
+
+  useEffect(() => {
+    AsyncStorage.getItem(KEYS.PROGRESS_DATE).then((stored) => {
+      if (stored && /^\d{4}-\d{2}-\d{2}$/.test(stored)) setProgressDateStr(stored);
+    });
+  }, []);
+
+  const setProgressDate = useCallback((dateStr: string) => {
+    setProgressDateStr(dateStr);
+    AsyncStorage.setItem(KEYS.PROGRESS_DATE, dateStr);
+  }, []);
+
+  const resetProgressDate = useCallback(() => {
+    const today = formatDateStr(new Date());
+    setProgressDateStr(today);
+    AsyncStorage.removeItem(KEYS.PROGRESS_DATE);
+  }, []);
 
   const remotePlanDays = useMemo((): PlanDay[] => {
     if (!remote?.schedule || !remote.startDate) return [];
@@ -66,7 +86,7 @@ export function useSchedule() {
   }, [remote?.schedule, remote?.startDate, remotePlanDays]);
 
   const effectivePlanDays = useMemo(() => {
-    return [...remotePlanDays, ...planDays];
+    return [...planDays, ...remotePlanDays];
   }, [remotePlanDays, planDays]);
 
   const effectiveSchedules = useMemo(() => {
@@ -90,14 +110,13 @@ export function useSchedule() {
   }, [refresh]);
 
   const todayPlan = useCallback((): PlanDay | undefined => {
-    const today = formatDateStr(new Date());
-    return getPlanDayForDate(effectivePlanDays, today);
-  }, [effectivePlanDays]);
+    return getPlanDayForDate(effectivePlanDays, progressDateStr);
+  }, [effectivePlanDays, progressDateStr]);
 
   const tomorrowPlan = useCallback((): PlanDay | undefined => {
-    const tomorrow = addDays(formatDateStr(new Date()), 1);
+    const tomorrow = addDays(progressDateStr, 1);
     return getPlanDayForDate(effectivePlanDays, tomorrow);
-  }, [effectivePlanDays]);
+  }, [effectivePlanDays, progressDateStr]);
 
   const getScheduleForDay = useCallback(
     (day: PlanDay): LoadedSchedule | undefined => {
@@ -186,9 +205,15 @@ export function useSchedule() {
 
   const getDaysForSchedule = useCallback(
     (scheduleId: string): PlanDay[] => {
-      return effectivePlanDays
-        .filter((d) => d.scheduleId === scheduleId)
-        .sort((a, b) => a.date.localeCompare(b.date));
+      const seenByDate = new Set<string>();
+      const unique: PlanDay[] = [];
+      for (const d of effectivePlanDays) {
+        if (d.scheduleId !== scheduleId) continue;
+        if (seenByDate.has(d.date)) continue;
+        seenByDate.add(d.date);
+        unique.push(d);
+      }
+      return unique.sort((a, b) => a.date.localeCompare(b.date));
     },
     [effectivePlanDays],
   );
@@ -204,6 +229,9 @@ export function useSchedule() {
     schedules: effectiveSchedules,
     loading,
     refresh,
+    progressDateStr,
+    setProgressDate,
+    resetProgressDate,
     todayPlan,
     tomorrowPlan,
     getScheduleForDay,

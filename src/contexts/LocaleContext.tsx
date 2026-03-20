@@ -7,7 +7,8 @@ import React, {
   useCallback,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { en, type TranslationKey } from "../i18n/en";
+import { en } from "../i18n/en";
+import type { TranslationKey } from "../i18n/en";
 import { ru } from "../i18n/ru";
 import { KEYS } from "../data/storageKeys";
 
@@ -28,7 +29,7 @@ function interpolate(str: string, params?: TParams): string {
 type LocaleContextValue = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  t: (key: TranslationKey, params?: TParams) => string;
+  t: (key: TranslationKey | string, params?: TParams) => string;
 };
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
@@ -48,8 +49,9 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const t = useCallback(
-    (key: TranslationKey, params?: TParams) => {
-      const str = translations[locale][key] ?? en[key];
+    (key: TranslationKey | string, params?: TParams) => {
+      const k = key in en ? (key as TranslationKey) : null;
+      const str = k ? translations[locale][k] ?? en[k] : String(key);
       return interpolate(str, params);
     },
     [locale],

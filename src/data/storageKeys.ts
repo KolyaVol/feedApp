@@ -11,4 +11,5 @@ export const KEYS = {
   HIDE_SUBSTITUTIONS: "@feed/hide_substitutions",
   REMOTE_FEED_CACHE: "@feed/remote_feed_cache",
   REMOTE_FEED_START_DATE: "@feed/remote_feed_start_date",
+  PROGRESS_DATE: "@feed/progress_date",
 } as const;
