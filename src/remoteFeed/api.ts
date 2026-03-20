@@ -32,6 +32,16 @@ function asStringArray(v: unknown): string[] | undefined {
   return out;
 }
 
+function parseAllowedProducts(v: unknown): RemoteFeedSchedule["allowed_products"] | undefined {
+  if (!isRecord(v)) return undefined;
+  return {
+    vegetables: asStringArray(v.vegetables),
+    cereals: asStringArray(v.cereals),
+    fruits: asStringArray(v.fruits),
+    meat: asStringArray(v.meat),
+  };
+}
+
 function parseMeal(v: unknown): RemoteFeedDayMeal | null {
   if (!isRecord(v)) return null;
   const product = asString(v.product);
@@ -62,7 +72,13 @@ function parseWeek(v: unknown): RemoteFeedPlanWeek | null {
   if (week === null || !Array.isArray(daysRaw)) return null;
   const days = daysRaw.map(parsePlanDay).filter(Boolean) as RemoteFeedPlanDay[];
   if (!days.length) return null;
-  return { week, focus: asString(v.focus) ?? undefined, notes: asString(v.notes) ?? undefined, days };
+  return {
+    week,
+    focus: asString(v.focus) ?? undefined,
+    notes: asString(v.notes) ?? undefined,
+    allowed_products: parseAllowedProducts(v.allowed_products),
+    days,
+  };
 }
 
 function parseSlot(v: unknown): RemoteFeedSlot | null {
@@ -110,6 +126,7 @@ function parseSchedule(v: unknown): RemoteFeedSchedule | null {
       : undefined,
     introduction_plan,
     hidden_risks: asStringArray(v.hidden_risks),
+    allowed_products: parseAllowedProducts(v.allowed_products),
   };
 }
 

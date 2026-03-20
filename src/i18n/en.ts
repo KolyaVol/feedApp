@@ -22,6 +22,7 @@ export const en = {
   mainWeek: "Week",
   mainSubstitutions: "Substitutions",
   mainNotes: "Notes",
+  mainAllowedProducts: "Allowed products",
   mainSafetyTip: "Safety tip",
   mainDaysRemainingAlert: "Current loaded data: {{count}} days remaining",
   mainChangeAllDaysTimeTitle: "Change time for all days",

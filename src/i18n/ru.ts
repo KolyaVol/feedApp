@@ -24,6 +24,7 @@ export const ru: Record<TranslationKey, string> = {
   mainWeek: "Неделя",
   mainSubstitutions: "Замены",
   mainNotes: "Заметки",
+  mainAllowedProducts: "Разрешенные продукты",
   mainSafetyTip: "Совет по безопасности",
   mainDaysRemainingAlert: "Текущие загруженные данные: осталось {{count}} дней",
   mainChangeAllDaysTimeTitle: "Изменить время для всех дней",

@@ -25,6 +25,12 @@ export interface RemoteFeedPlanWeek {
   week: number;
   focus?: string;
   notes?: string;
+  allowed_products?: {
+    vegetables?: string[];
+    cereals?: string[];
+    fruits?: string[];
+    meat?: string[];
+  };
   days: RemoteFeedPlanDay[];
 }
 
@@ -40,6 +46,12 @@ export interface RemoteFeedSchedule {
   };
   introduction_plan: RemoteFeedPlanWeek[];
   hidden_risks?: string[];
+  allowed_products?: {
+    vegetables?: string[];
+    cereals?: string[];
+    fruits?: string[];
+    meat?: string[];
+  };
 }
 
 export interface RemoteFeedMeal {

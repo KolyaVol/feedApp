@@ -73,5 +73,6 @@ export interface LoadedSchedule {
   endDate: string;
   signsOfReadiness: string[];
   safetyGuidelines: string[];
+  allowedProducts?: string[];
   loadedAt: string;
 }

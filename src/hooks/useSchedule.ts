@@ -34,8 +34,20 @@ interface ScheduleJson {
     meal_slots?: { name: "morning" | "lunch" | "evening"; time: string; rules?: string[] }[];
   };
   hidden_risks?: string[];
+  allowed_products?: {
+    vegetables?: string[];
+    cereals?: string[];
+    fruits?: string[];
+    meat?: string[];
+  };
   introduction_plan?: {
     week: number;
+    allowed_products?: {
+      vegetables?: string[];
+      cereals?: string[];
+      fruits?: string[];
+      meat?: string[];
+    };
     days: {
       day: number;
       notes?: string;
@@ -61,6 +73,16 @@ interface ScheduleJson {
 
 let sharedProgressDateStr: string | null = null;
 const progressDateListeners = new Set<(value: string) => void>();
+
+function flattenAllowedProducts(input?: {
+  vegetables?: string[];
+  cereals?: string[];
+  fruits?: string[];
+  meat?: string[];
+}): string[] {
+  if (!input) return [];
+  return [...new Set([...(input.vegetables ?? []), ...(input.cereals ?? []), ...(input.fruits ?? []), ...(input.meat ?? [])])];
+}
 
 function publishProgressDate(value: string) {
   sharedProgressDateStr = value;
@@ -143,7 +165,6 @@ export function useSchedule() {
     return out;
   }, [remote?.schedule, remote?.startDate]);
   const remoteToday = useMemo(() => remote?.today ?? null, [remote?.today]);
-
   const remoteLoadedSchedule = useMemo((): LoadedSchedule | null => {
     if (!remote?.schedule || !remote.startDate || !remotePlanDays.length) return null;
     const startDate = remote.startDate;
@@ -155,6 +176,7 @@ export function useSchedule() {
       endDate,
       signsOfReadiness: remote.schedule.breastfeeding?.rules ?? [],
       safetyGuidelines: remote.schedule.hidden_risks ?? [],
+      allowedProducts: flattenAllowedProducts(remote.schedule.allowed_products),
       loadedAt: "",
     };
   }, [remote?.schedule, remote?.startDate, remotePlanDays]);
@@ -167,6 +189,19 @@ export function useSchedule() {
     const list = remoteLoadedSchedule ? [remoteLoadedSchedule, ...schedules] : schedules;
     return list;
   }, [remoteLoadedSchedule, schedules]);
+
+  const allowedProductsForCurrentDay = useMemo(() => {
+    const day = getPlanDayForDate(effectivePlanDays, progressDateStr);
+    if (!day) return [] as string[];
+    const scheduleForDay = effectiveSchedules.find((s) => s.id === day.scheduleId);
+    let current = scheduleForDay?.allowedProducts ?? [];
+    if (day.scheduleId === "remote") {
+      const weekOverride = remote?.schedule?.introduction_plan?.find((w) => w.week === day.weekNumber)?.allowed_products;
+      const weekAllowed = flattenAllowedProducts(weekOverride);
+      if (weekAllowed.length) current = weekAllowed;
+    }
+    return [...new Set(current)];
+  }, [effectivePlanDays, progressDateStr, effectiveSchedules, remote?.schedule?.introduction_plan]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -280,6 +315,7 @@ export function useSchedule() {
         endDate,
         signsOfReadiness: source.breastfeeding?.rules ?? [],
         safetyGuidelines: source.hidden_risks ?? [],
+        allowedProducts: flattenAllowedProducts(source.allowed_products),
         loadedAt: new Date().toISOString(),
       };
 
@@ -346,6 +382,7 @@ export function useSchedule() {
     resetProgressDate,
     todayPlan,
     remoteToday,
+    allowedProductsForCurrentDay,
     remoteDayPlans,
     tomorrowPlan,
     getScheduleForDay,

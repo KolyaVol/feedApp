@@ -34,6 +34,7 @@ export function MainScreen() {
     refresh,
     todayPlan,
     remoteToday,
+    allowedProductsForCurrentDay,
     remoteDayPlans,
     getScheduleForDay,
     progressDateStr,
@@ -109,6 +110,33 @@ export function MainScreen() {
       month: "long",
     });
   }, [progressDateStr]);
+
+  const productPastelColor = useCallback(
+    (product: string) => {
+      const p = product.toLowerCase();
+      if (
+        p.includes("брокколи") ||
+        p.includes("кабач") ||
+        p.includes("капуст") ||
+        p.includes("тыкв") ||
+        p.includes("морков") ||
+        p.includes("картоф")
+      ) {
+        return colors.pastelGreen;
+      }
+      if (p.includes("рис") || p.includes("греч") || p.includes("кукуруз")) {
+        return colors.pastelYellow;
+      }
+      if (p.includes("яблок") || p.includes("груш")) {
+        return colors.pastelOrange;
+      }
+      if (p.includes("индей") || p.includes("кролик") || p.includes("куриц")) {
+        return colors.pastelRed;
+      }
+      return colors.chipBg;
+    },
+    [colors],
+  );
 
   const todayHeader = useMemo(() => {
     return dayNumber ? `${todayStr} · ${t("loadDataDay")} ${dayNumber}` : todayStr;
@@ -256,6 +284,22 @@ export function MainScreen() {
           <Text style={styles.sectionTitle}>{t("mainNotes")}</Text>
           <View style={styles.noteCard}>
             <Text style={styles.noteText}>{plan.notes}</Text>
+          </View>
+        </View>
+      ) : null}
+
+      {allowedProductsForCurrentDay.length ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t("mainAllowedProducts")}</Text>
+          <View style={styles.allowedProductsRow}>
+            {allowedProductsForCurrentDay.map((product) => (
+              <View
+                key={product}
+                style={[styles.allowedProductChip, { backgroundColor: productPastelColor(product) }]}
+              >
+                <Text style={styles.allowedProductText}>{product}</Text>
+              </View>
+            ))}
           </View>
         </View>
       ) : null}
@@ -422,11 +466,27 @@ function useLocalStyles(colors: {
           flexWrap: "wrap",
           gap: 8,
         },
+        allowedProductsRow: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: 8,
+        },
         chip: {
           backgroundColor: colors.chipBg,
           paddingVertical: 8,
           paddingHorizontal: 14,
           borderRadius: spacing.radiusChip,
+        },
+        allowedProductChip: {
+          paddingVertical: 8,
+          paddingHorizontal: 14,
+          borderRadius: spacing.radiusChip,
+        },
+        allowedProductText: {
+          fontSize: 14,
+          color: colors.text,
+          fontFamily: fonts.regular,
+          textTransform: "capitalize",
         },
         chipText: {
           fontSize: 14,
