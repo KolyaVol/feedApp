@@ -24,7 +24,7 @@ import { dateToTime, timeToDate } from "../utils/date";
 export function MainScreen() {
   const insets = useSafeAreaInsets();
   const g = useGlobalStyles();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const { colors } = useTheme();
   const { hideSubstitutions } = usePreferences();
   const styles = useLocalStyles(colors);
@@ -104,12 +104,12 @@ export function MainScreen() {
 
   const todayStr = useMemo(() => {
     const now = new Date(progressDateStr + "T00:00:00");
-    return now.toLocaleDateString(undefined, {
+    return now.toLocaleDateString(locale, {
       weekday: "long",
       day: "numeric",
       month: "long",
     });
-  }, [progressDateStr]);
+  }, [locale, progressDateStr]);
 
   const productPastelColor = useCallback(
     (product: string) => {
