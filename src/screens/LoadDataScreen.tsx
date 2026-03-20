@@ -672,30 +672,32 @@ export function LoadDataScreen() {
                   {t("loadDataCurrentDay")}
                 </Text>
                 <View style={styles.progressControls}>
-                  <TouchableOpacity
-                    style={[styles.progressBtn, { borderColor: colors.borderLight }, !canGoPrev && g.buttonDisabled]}
-                    disabled={!canGoPrev}
-                    onPress={goPrev}
-                  >
-                    <Text style={[styles.progressBtnText, { color: colors.text }]}>{t("loadDataPrev")}</Text>
-                  </TouchableOpacity>
-                  <View style={styles.progressLabelWrap}>
-                    <Text style={[styles.progressMonthLabel, { color: colors.textMuted }]}>
-                      {selectedSchedule ? `${t("loadDataMonth")} ${selectedSchedule.month}` : ""}
-                    </Text>
-                    <Text style={[styles.progressLabel, { color: colors.textMuted }]}>
-                      {selectedStartDate
-                        ? `${t("loadDataDay")} ${dayIndexFromStart(selectedStartDate, progressDayStr)}`
-                        : formatDateDisplay(progressDayStr, locale)}
-                    </Text>
+                  <View style={styles.progressMainRow}>
+                    <TouchableOpacity
+                      style={[styles.progressBtn, { borderColor: colors.borderLight }, !canGoPrev && g.buttonDisabled]}
+                      disabled={!canGoPrev}
+                      onPress={goPrev}
+                    >
+                      <Text style={[styles.progressBtnText, { color: colors.text }]}>{t("loadDataPrev")}</Text>
+                    </TouchableOpacity>
+                    <View style={styles.progressLabelWrap}>
+                      <Text style={[styles.progressMonthLabel, { color: colors.textMuted }]}>
+                        {selectedSchedule ? `${t("loadDataMonth")} ${selectedSchedule.month}` : ""}
+                      </Text>
+                      <Text style={[styles.progressLabel, { color: colors.textMuted }]}>
+                        {selectedStartDate
+                          ? `${t("loadDataDay")} ${dayIndexFromStart(selectedStartDate, progressDayStr)}`
+                          : formatDateDisplay(progressDayStr, locale)}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.progressBtn, { borderColor: colors.borderLight }, !canGoNext && g.buttonDisabled]}
+                      disabled={!canGoNext}
+                      onPress={goNext}
+                    >
+                      <Text style={[styles.progressBtnText, { color: colors.text }]}>{t("loadDataNext")}</Text>
+                    </TouchableOpacity>
                   </View>
-                  <TouchableOpacity
-                    style={[styles.progressBtn, { borderColor: colors.borderLight }, !canGoNext && g.buttonDisabled]}
-                    disabled={!canGoNext}
-                    onPress={goNext}
-                  >
-                    <Text style={[styles.progressBtnText, { color: colors.text }]}>{t("loadDataNext")}</Text>
-                  </TouchableOpacity>
                   <TouchableOpacity style={styles.progressReset} onPress={scrollToCurrentDayRow}>
                     <Text style={[styles.progressResetText, { color: colors.primary }]}>{t("loadDataCurrentDay")}</Text>
                   </TouchableOpacity>
@@ -1044,28 +1046,32 @@ function useLocalStyles(colors: {
           textAlign: "center",
         },
         progressControls: {
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 14,
+          alignItems: "stretch",
+          gap: 10,
           paddingHorizontal: 18,
           paddingBottom: 16,
-          flexWrap: "wrap",
+        },
+        progressMainRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
         },
         progressBtn: {
           borderWidth: 1,
           borderRadius: spacing.radiusMd,
-          paddingVertical: 14,
-          paddingHorizontal: 18,
-          minWidth: 86,
+          paddingVertical: 12,
+          paddingHorizontal: 12,
+          minWidth: 78,
           alignItems: "center",
         },
         progressBtnText: {
-          fontSize: 18,
+          fontSize: 17,
           fontFamily: fonts.medium,
         },
         progressLabelWrap: {
+          flex: 1,
           alignItems: "center",
-          minWidth: 90,
+          minWidth: 0,
         },
         progressMonthLabel: {
           fontSize: 13,
@@ -1074,11 +1080,13 @@ function useLocalStyles(colors: {
           marginBottom: 2,
         },
         progressLabel: {
-          fontSize: 18,
+          fontSize: 17,
           fontFamily: fonts.regular,
+          textAlign: "center",
         },
         progressReset: {
-          paddingVertical: 14,
+          alignSelf: "center",
+          paddingVertical: 10,
           paddingHorizontal: 10,
         },
         progressResetText: {
