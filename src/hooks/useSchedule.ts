@@ -144,41 +144,61 @@ export function useSchedule() {
 
   const remotePlanDays = useMemo((): PlanDay[] => {
     if (!remote?.schedule || !remote.startDate) return [];
-    return remoteScheduleToPlanDays(remote.schedule, remote.startDate);
+    const monthSchedules = remote.schedule.months?.length ? remote.schedule.months : [remote.schedule];
+    const all: PlanDay[] = [];
+    let offset = 0;
+    for (const monthSchedule of monthSchedules) {
+      const monthStart = addDays(remote.startDate, offset);
+      const monthDays = remoteScheduleToPlanDays(monthSchedule, monthStart).map((d, idx) => ({
+        ...d,
+        id: `remote-${monthSchedule.month}-${idx}`,
+        scheduleId: `remote-${monthSchedule.month}`,
+      }));
+      all.push(...monthDays);
+      offset += monthDays.length;
+    }
+    return all;
   }, [remote?.schedule, remote?.startDate]);
   const remoteDayPlans = useMemo((): DayPlan[] => {
     if (!remote?.schedule || !remote.startDate) return [];
-    const start = remote.startDate;
-    const weeks = remote.schedule.introduction_plan ?? [];
+    const monthSchedules = remote.schedule.months?.length ? remote.schedule.months : [remote.schedule];
     let index = 0;
     const out: DayPlan[] = [];
-    for (const w of weeks) {
-      for (const d of w.days) {
-        const date = addDays(start, index++);
-        const meals: DayPlan["meals"] = [];
-        if (d.morning) meals.push({ mealType: "morning", product: d.morning.product, amountGrams: d.morning.amount_grams });
-        for (const m of d.lunch ?? []) meals.push({ mealType: "lunch", product: m.product, amountGrams: m.amount_grams });
-        for (const m of d.evening ?? []) meals.push({ mealType: "evening", product: m.product, amountGrams: m.amount_grams });
-        out.push({ date, weekNumber: w.week, dayNumber: d.day, notes: d.notes, meals, sourceMonth: remote.schedule.month });
+    for (const monthSchedule of monthSchedules) {
+      const weeks = monthSchedule.introduction_plan ?? [];
+      for (const w of weeks) {
+        for (const d of w.days) {
+          const date = addDays(remote.startDate, index++);
+          const meals: DayPlan["meals"] = [];
+          if (d.morning) meals.push({ mealType: "morning", product: d.morning.product, amountGrams: d.morning.amount_grams });
+          for (const m of d.lunch ?? []) meals.push({ mealType: "lunch", product: m.product, amountGrams: m.amount_grams });
+          for (const m of d.evening ?? []) meals.push({ mealType: "evening", product: m.product, amountGrams: m.amount_grams });
+          out.push({ date, weekNumber: w.week, dayNumber: d.day, notes: d.notes, meals, sourceMonth: monthSchedule.month });
+        }
       }
     }
     return out;
   }, [remote?.schedule, remote?.startDate]);
   const remoteToday = useMemo(() => remote?.today ?? null, [remote?.today]);
-  const remoteLoadedSchedule = useMemo((): LoadedSchedule | null => {
-    if (!remote?.schedule || !remote.startDate || !remotePlanDays.length) return null;
-    const startDate = remote.startDate;
-    const endDate = remotePlanDays[remotePlanDays.length - 1]?.date ?? startDate;
-    return {
-      id: "remote",
-      month: remote.schedule.month,
-      startDate,
-      endDate,
-      signsOfReadiness: remote.schedule.breastfeeding?.rules ?? [],
-      safetyGuidelines: remote.schedule.hidden_risks ?? [],
-      allowedProducts: flattenAllowedProducts(remote.schedule.allowed_products),
-      loadedAt: "",
-    };
+  const remoteLoadedSchedules = useMemo((): LoadedSchedule[] => {
+    if (!remote?.schedule || !remote.startDate || !remotePlanDays.length) return [];
+    const monthSchedules = remote.schedule.months?.length ? remote.schedule.months : [remote.schedule];
+    return monthSchedules
+      .map((monthSchedule) => {
+        const days = remotePlanDays.filter((d) => d.scheduleId === `remote-${monthSchedule.month}`);
+        if (!days.length) return null;
+        return {
+          id: `remote-${monthSchedule.month}`,
+          month: monthSchedule.month,
+          startDate: days[0]!.date,
+          endDate: days[days.length - 1]!.date,
+          signsOfReadiness: monthSchedule.breastfeeding?.rules ?? [],
+          safetyGuidelines: monthSchedule.hidden_risks ?? [],
+          allowedProducts: flattenAllowedProducts(monthSchedule.allowed_products),
+          loadedAt: "",
+        } as LoadedSchedule;
+      })
+      .filter(Boolean) as LoadedSchedule[];
   }, [remote?.schedule, remote?.startDate, remotePlanDays]);
 
   const effectivePlanDays = useMemo(() => {
@@ -186,17 +206,21 @@ export function useSchedule() {
   }, [remotePlanDays, planDays]);
 
   const effectiveSchedules = useMemo(() => {
-    const list = remoteLoadedSchedule ? [remoteLoadedSchedule, ...schedules] : schedules;
+    const list = remoteLoadedSchedules.length ? [...remoteLoadedSchedules, ...schedules] : schedules;
     return list;
-  }, [remoteLoadedSchedule, schedules]);
+  }, [remoteLoadedSchedules, schedules]);
 
   const allowedProductsForCurrentDay = useMemo(() => {
     const day = getPlanDayForDate(effectivePlanDays, progressDateStr);
     if (!day) return [] as string[];
     const scheduleForDay = effectiveSchedules.find((s) => s.id === day.scheduleId);
     let current = scheduleForDay?.allowedProducts ?? [];
-    if (day.scheduleId === "remote") {
-      const weekOverride = remote?.schedule?.introduction_plan?.find((w) => w.week === day.weekNumber)?.allowed_products;
+    if (day.scheduleId.startsWith("remote-")) {
+      const month = Number(day.scheduleId.replace("remote-", ""));
+      const monthSchedule =
+        remote?.schedule?.months?.find((m) => m.month === month) ??
+        (remote?.schedule?.month === month ? remote.schedule : undefined);
+      const weekOverride = monthSchedule?.introduction_plan?.find((w) => w.week === day.weekNumber)?.allowed_products;
       const weekAllowed = flattenAllowedProducts(weekOverride);
       if (weekAllowed.length) current = weekAllowed;
     }

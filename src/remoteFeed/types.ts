@@ -52,6 +52,7 @@ export interface RemoteFeedSchedule {
     fruits?: string[];
     meat?: string[];
   };
+  months?: RemoteFeedSchedule[];
 }
 
 export interface RemoteFeedMeal {

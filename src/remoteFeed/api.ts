@@ -57,10 +57,14 @@ function parsePlanDay(v: unknown): RemoteFeedPlanDay | null {
   const morning = parseMeal(v.morning);
   const lunch = Array.isArray(v.lunch)
     ? (v.lunch.map(parseMeal).filter(Boolean) as RemoteFeedDayMeal[])
-    : undefined;
+    : parseMeal(v.lunch)
+      ? [parseMeal(v.lunch)!]
+      : undefined;
   const evening = Array.isArray(v.evening)
     ? (v.evening.map(parseMeal).filter(Boolean) as RemoteFeedDayMeal[])
-    : undefined;
+    : parseMeal(v.evening)
+      ? [parseMeal(v.evening)!]
+      : undefined;
   if (!morning && !lunch?.length && !evening?.length) return null;
   return { day, notes: asString(v.notes) ?? undefined, morning: morning ?? undefined, lunch, evening };
 }
@@ -134,11 +138,11 @@ function parseRoot(v: unknown): RemoteFeedSchedule | null {
   const direct = parseSchedule(v);
   if (direct) return direct;
   if (!isRecord(v) || !Array.isArray(v.months)) return null;
-  for (const monthNode of v.months) {
-    const parsed = parseSchedule(monthNode);
-    if (parsed) return parsed;
-  }
-  return null;
+  const parsedMonths = v.months.map(parseSchedule).filter(Boolean) as RemoteFeedSchedule[];
+  if (!parsedMonths.length) return null;
+  const sorted = [...parsedMonths].sort((a, b) => a.month - b.month);
+  const latest = sorted[sorted.length - 1]!;
+  return { ...latest, months: sorted };
 }
 
 export async function fetchRemoteJson(url: string): Promise<RemoteFeedSchedule | null> {

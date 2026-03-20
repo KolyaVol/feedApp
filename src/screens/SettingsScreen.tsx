@@ -25,7 +25,7 @@ import {
   cancelScheduledNotification,
   rescheduleAllReminders,
 } from "../notifications/schedule";
-import type { Reminder } from "../types";
+import type { Reminder, MealType } from "../types";
 import { spacing } from "../theme";
 
 export function SettingsScreen() {
@@ -48,6 +48,7 @@ export function SettingsScreen() {
   const [editing, setEditing] = useState<Reminder | null>(null);
   const [title, setTitle] = useState("");
   const [time, setTime] = useState(() => new Date());
+  const [linkedMealType, setLinkedMealType] = useState<MealType | undefined>(undefined);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
   useEffect(() => {
@@ -61,6 +62,7 @@ export function SettingsScreen() {
     setEditing(null);
     setTitle("");
     setTime(new Date());
+    setLinkedMealType(undefined);
     setModalVisible(true);
   };
 
@@ -68,6 +70,7 @@ export function SettingsScreen() {
     setEditing(item);
     setTitle(item.title);
     setTime(timeToDate(item.time));
+    setLinkedMealType(item.linkedMealType);
     setModalVisible(true);
   };
 
@@ -82,10 +85,12 @@ export function SettingsScreen() {
         ...editing,
         title: trimmed,
         time: timeStr,
+        linkedMealType,
       });
       await updateReminderState(editing.id, {
         title: trimmed,
         time: timeStr,
+        linkedMealType,
         notificationId: notifId ?? undefined,
       });
     } else {
@@ -93,6 +98,7 @@ export function SettingsScreen() {
         title: trimmed,
         time: timeStr,
         enabled: true,
+        linkedMealType,
       });
       const notifId = await scheduleReminder(added);
       if (notifId)
@@ -294,6 +300,36 @@ export function SettingsScreen() {
               </Text>
               <Text style={g.textBody}>{dateToTime(time)}</Text>
             </TouchableOpacity>
+            <View style={styles.linkMealWrap}>
+              <Text style={g.labelMuted}>{t("remindersLinkMeal")}</Text>
+              <View style={styles.linkMealRow}>
+                {(
+                  [
+                    { value: undefined, label: t("remindersMealNone") },
+                    { value: "morning" as MealType, label: t("mealBreakfast") },
+                    { value: "lunch" as MealType, label: t("mealLunch") },
+                    { value: "evening" as MealType, label: t("mealEvening") },
+                  ] as const
+                ).map((opt) => {
+                  const selected = linkedMealType === opt.value;
+                  return (
+                    <TouchableOpacity
+                      key={String(opt.value ?? "none")}
+                      style={[
+                        styles.linkMealBtn,
+                        {
+                          borderColor: selected ? colors.primary : colors.borderLight,
+                          backgroundColor: selected ? colors.chipSelectedBg : "transparent",
+                        },
+                      ]}
+                      onPress={() => setLinkedMealType(opt.value)}
+                    >
+                      <Text style={{ color: selected ? colors.primary : colors.text }}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
             {showTimePicker && (
               <DateTimePicker
                 value={time}
@@ -342,6 +378,14 @@ function useLocalStyles(colors: { borderLight: string }) {
           marginBottom: 20,
         },
         timeLabel: { marginRight: 12 },
+        linkMealWrap: { marginBottom: 20, gap: 8 },
+        linkMealRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+        linkMealBtn: {
+          borderWidth: 1,
+          borderRadius: 8,
+          paddingVertical: 6,
+          paddingHorizontal: 10,
+        },
       }),
     [colors],
   );

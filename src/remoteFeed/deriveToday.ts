@@ -24,17 +24,20 @@ function addDays(dateStr: string, count: number): string {
 }
 
 export function flattenScheduleDays(schedule: RemoteFeedSchedule) {
-  const intro = Array.isArray(schedule.introduction_plan) ? schedule.introduction_plan : [];
-  return intro.flatMap((w) =>
-    w.days.map((d) => ({
-      week: w.week,
-      day: d.day,
-      notes: d.notes,
-      morning: d.morning,
-      lunch: d.lunch,
-      evening: d.evening,
-    })),
-  );
+  const source = schedule.months?.length ? schedule.months : [schedule];
+  return source.flatMap((monthSchedule) => {
+    const intro = Array.isArray(monthSchedule.introduction_plan) ? monthSchedule.introduction_plan : [];
+    return intro.flatMap((w) =>
+      w.days.map((d) => ({
+        week: w.week,
+        day: d.day,
+        notes: d.notes,
+        morning: d.morning,
+        lunch: d.lunch,
+        evening: d.evening,
+      })),
+    );
+  });
 }
 
 function hashSeed(input: string): number {

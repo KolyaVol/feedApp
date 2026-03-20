@@ -23,6 +23,7 @@ export interface Reminder {
   enabled: boolean;
   repeat?: "daily" | "weekdays";
   notificationId?: string;
+  linkedMealType?: MealType;
 }
 
 export type MealType = "morning" | "lunch" | "evening";

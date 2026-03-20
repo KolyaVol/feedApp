@@ -223,8 +223,8 @@ export function MainScreen() {
       ) : null}
 
       {orderedMeals.length ? (
-        orderedMeals.map((meal) => (
-          <View key={meal.type} style={styles.mainCard}>
+        orderedMeals.map((meal, index) => (
+          <View key={`${meal.type}-${meal.items.map((x) => x.product).join("+")}-${index}`} style={styles.mainCard}>
             <Text style={styles.foodTypeLabel}>{mealLabel(meal.type)}</Text>
             <Text style={styles.foodName}>{meal.items.map((x) => x.product).join(" + ")}</Text>
             <View style={styles.detailsRow}>

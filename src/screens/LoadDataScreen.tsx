@@ -605,12 +605,33 @@ export function LoadDataScreen() {
 
   const selectedStartDate = selectedSchedule?.startDate ?? null;
 
-  const isProgressInRange =
-    selectedSchedule &&
-    progressDayStr >= selectedSchedule.startDate &&
-    progressDayStr <= selectedSchedule.endDate;
-  const isFirstDay = selectedSchedule && progressDayStr === selectedSchedule.startDate;
-  const isLastDay = selectedSchedule && progressDayStr === selectedSchedule.endDate;
+  const scheduleForDate = useCallback(
+    (dateStr: string) =>
+      availableSchedules.find((s) => dateStr >= s.startDate && dateStr <= s.endDate) ?? null,
+    [availableSchedules],
+  );
+
+  const prevSchedule = scheduleForDate(addDays(progressDayStr, -1));
+  const nextSchedule = scheduleForDate(addDays(progressDayStr, 1));
+  const canGoPrev = !!prevSchedule;
+  const canGoNext = !!nextSchedule;
+  const isLastDay = selectedSchedule && progressDayStr === selectedSchedule.endDate && !canGoNext;
+
+  const goPrev = useCallback(() => {
+    const targetDate = addDays(progressDayStr, -1);
+    const targetSchedule = scheduleForDate(targetDate);
+    if (!targetSchedule) return;
+    if (targetSchedule.id !== selectedScheduleId) setSelectedScheduleId(targetSchedule.id);
+    setProgressDate(targetDate);
+  }, [progressDayStr, scheduleForDate, selectedScheduleId, setProgressDate]);
+
+  const goNext = useCallback(() => {
+    const targetDate = addDays(progressDayStr, 1);
+    const targetSchedule = scheduleForDate(targetDate);
+    if (!targetSchedule) return;
+    if (targetSchedule.id !== selectedScheduleId) setSelectedScheduleId(targetSchedule.id);
+    setProgressDate(targetDate);
+  }, [progressDayStr, scheduleForDate, selectedScheduleId, setProgressDate]);
 
   const scrollToCurrentDayRow = useCallback(() => {
     const y = rowYByDate[progressDayStr];
@@ -652,21 +673,26 @@ export function LoadDataScreen() {
                 </Text>
                 <View style={styles.progressControls}>
                   <TouchableOpacity
-                    style={[styles.progressBtn, { borderColor: colors.borderLight }, isFirstDay && g.buttonDisabled]}
-                    disabled={!!isFirstDay}
-                    onPress={() => !isFirstDay && setProgressDate(addDays(progressDayStr, -1))}
+                    style={[styles.progressBtn, { borderColor: colors.borderLight }, !canGoPrev && g.buttonDisabled]}
+                    disabled={!canGoPrev}
+                    onPress={goPrev}
                   >
                     <Text style={[styles.progressBtnText, { color: colors.text }]}>{t("loadDataPrev")}</Text>
                   </TouchableOpacity>
-                  <Text style={[styles.progressLabel, { color: colors.textMuted }]}>
-                    {selectedStartDate
-                      ? `${t("loadDataDay")} ${dayIndexFromStart(selectedStartDate, progressDayStr)}`
-                      : formatDateDisplay(progressDayStr, locale)}
-                  </Text>
+                  <View style={styles.progressLabelWrap}>
+                    <Text style={[styles.progressMonthLabel, { color: colors.textMuted }]}>
+                      {selectedSchedule ? `${t("loadDataMonth")} ${selectedSchedule.month}` : ""}
+                    </Text>
+                    <Text style={[styles.progressLabel, { color: colors.textMuted }]}>
+                      {selectedStartDate
+                        ? `${t("loadDataDay")} ${dayIndexFromStart(selectedStartDate, progressDayStr)}`
+                        : formatDateDisplay(progressDayStr, locale)}
+                    </Text>
+                  </View>
                   <TouchableOpacity
-                    style={[styles.progressBtn, { borderColor: colors.borderLight }, isLastDay && g.buttonDisabled]}
-                    disabled={!!isLastDay}
-                    onPress={() => !isLastDay && setProgressDate(addDays(progressDayStr, 1))}
+                    style={[styles.progressBtn, { borderColor: colors.borderLight }, !canGoNext && g.buttonDisabled]}
+                    disabled={!canGoNext}
+                    onPress={goNext}
                   >
                     <Text style={[styles.progressBtnText, { color: colors.text }]}>{t("loadDataNext")}</Text>
                   </TouchableOpacity>
@@ -1036,6 +1062,16 @@ function useLocalStyles(colors: {
         progressBtnText: {
           fontSize: 18,
           fontFamily: fonts.medium,
+        },
+        progressLabelWrap: {
+          alignItems: "center",
+          minWidth: 90,
+        },
+        progressMonthLabel: {
+          fontSize: 13,
+          fontFamily: fonts.medium,
+          textTransform: "capitalize",
+          marginBottom: 2,
         },
         progressLabel: {
           fontSize: 18,
