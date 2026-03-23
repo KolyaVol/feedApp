@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useSchedule } from "../hooks/useSchedule";
-import { scheduleDailyPlanNotification } from "../notifications/schedule";
+import { cancelDailyPlanNotifications } from "../notifications/schedule";
 import { fonts, spacing } from "../theme";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
@@ -51,6 +51,7 @@ export function MainScreen() {
     useCallback(() => {
       tipPickedRef.current = false;
       refresh();
+      cancelDailyPlanNotifications();
     }, [refresh]),
   );
 
@@ -62,12 +63,6 @@ export function MainScreen() {
       tipPickedRef.current = true;
     }
   }, [schedules]);
-
-  useFocusEffect(
-    useCallback(() => {
-      scheduleDailyPlanNotification();
-    }, []),
-  );
 
   const plan = todayPlan();
   const schedule = plan ? getScheduleForDay(plan) : undefined;
@@ -164,7 +159,6 @@ export function MainScreen() {
   const saveAllDaysTime = useCallback(async () => {
     const time = dateToTime(changeTimeValue);
     await updateAllPlanDaysTime(time);
-    await scheduleDailyPlanNotification();
     setChangeTimeModalVisible(false);
     setShowTimePicker(false);
   }, [changeTimeValue, updateAllPlanDaysTime]);

@@ -74,28 +74,37 @@ export function SettingsScreen() {
     setModalVisible(true);
   };
 
+  const getTitleFromLinkedMeal = (mealType: MealType | undefined): string => {
+    if (mealType === "morning") return t("mealBreakfast");
+    if (mealType === "lunch") return t("mealLunch");
+    if (mealType === "evening") return t("mealEvening");
+    return "";
+  };
+
   const save = async () => {
     const trimmed = title.trim();
-    if (!trimmed) return;
+    const fallbackTitle = getTitleFromLinkedMeal(linkedMealType);
+    const finalTitle = trimmed || fallbackTitle;
+    if (!finalTitle) return;
     const timeStr = dateToTime(time);
     if (editing) {
       if (editing.notificationId)
         await cancelScheduledNotification(editing.notificationId);
       const notifId = await scheduleReminder({
         ...editing,
-        title: trimmed,
+        title: finalTitle,
         time: timeStr,
         linkedMealType,
       });
       await updateReminderState(editing.id, {
-        title: trimmed,
+        title: finalTitle,
         time: timeStr,
         linkedMealType,
         notificationId: notifId ?? undefined,
       });
     } else {
       const added = await addReminder({
-        title: trimmed,
+        title: finalTitle,
         time: timeStr,
         enabled: true,
         linkedMealType,

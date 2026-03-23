@@ -15,6 +15,12 @@ function parseTime(time: string): { hour: number; minute: number } | null {
   return { hour, minute };
 }
 
+function formatMealType(type: "morning" | "lunch" | "evening"): string {
+  if (type === "morning") return "Morning meal";
+  if (type === "lunch") return "Lunch meal";
+  return "Evening meal";
+}
+
 export async function cancelAllRemoteFeedNotifications(): Promise<void> {
   try {
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
@@ -45,13 +51,15 @@ export async function scheduleMealsFromFeedData(
       if (!meal.time) continue;
       const parsedTime = parseTime(meal.time);
       if (!parsedTime) continue;
-      const foods = meal.items.map((x) => x.product).join(", ");
+      const foods = meal.items
+        .map((x) => `${x.product} ${x.amount_grams}g`)
+        .join(", ");
       const advice = today.advice?.[0];
       const bodyBase = meal.notes ? `${foods} — ${meal.notes}` : foods;
       const body = advice ? `${bodyBase}\n💡 ${advice}` : bodyBase;
 
       await Notifications.scheduleNotificationAsync({
-        content: { title: "Feeding time", body, data: { tag: REMOTE_FEED_TAG } },
+        content: { title: formatMealType(meal.type), body, data: { tag: REMOTE_FEED_TAG } },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DAILY,
           hour: parsedTime.hour,

@@ -65,53 +65,112 @@
             {
               "day": 1,
               "notes": "",
-              "morning": { "product": "гречневая каша", "amount_grams": 5 },
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 5
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 30 },
-                { "product": "брокколи", "amount_grams": 20 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 30
+                },
+                {
+                  "product": "брокколи",
+                  "amount_grams": 20
+                }
               ]
             },
             {
               "day": 2,
               "notes": "",
-              "morning": { "product": "гречневая каша", "amount_grams": 10 },
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 10
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 25 },
-                { "product": "брокколи", "amount_grams": 25 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 25
+                },
+                {
+                  "product": "брокколи",
+                  "amount_grams": 25
+                }
               ]
             },
             {
               "day": 3,
               "notes": "",
-              "morning": { "product": "гречневая каша", "amount_grams": 20 },
-              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 20
+              },
+              "lunch": [
+                {
+                  "product": "брокколи",
+                  "amount_grams": 50
+                }
+              ]
             },
             {
               "day": 4,
               "notes": "",
-              "morning": { "product": "гречневая каша", "amount_grams": 30 },
-              "lunch": [{ "product": "кабачок", "amount_grams": 50 }]
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 30
+              },
+              "lunch": [
+                {
+                  "product": "кабачок",
+                  "amount_grams": 50
+                }
+              ]
             },
             {
               "day": 5,
               "notes": "",
-              "morning": { "product": "гречневая каша", "amount_grams": 40 },
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 40
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 25 },
-                { "product": "брокколи", "amount_grams": 25 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 25
+                },
+                {
+                  "product": "брокколи",
+                  "amount_grams": 25
+                }
               ]
             },
             {
               "day": 6,
               "notes": "",
-              "morning": { "product": "гречневая каша", "amount_grams": 50 },
-              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 50
+              },
+              "lunch": [
+                {
+                  "product": "брокколи",
+                  "amount_grams": 50
+                }
+              ]
             },
             {
               "day": 7,
               "notes": "",
-              "morning": { "product": "гречневая каша", "amount_grams": 60 },
-              "lunch": [{ "product": "кабачок", "amount_grams": 50 }]
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 60
+              },
+              "lunch": [
+                {
+                  "product": "кабачок",
+                  "amount_grams": 50
+                }
+              ]
             }
           ]
         },
@@ -123,58 +182,119 @@
             {
               "day": 1,
               "notes": "",
-              "morning": { "product": "рисовая каша", "amount_grams": 5 },
+              "morning": {
+                "product": "рисовая каша",
+                "amount_grams": 5
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 30 },
-                { "product": "брокколи", "amount_grams": 20 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 30
+                },
+                {
+                  "product": "брокколи",
+                  "amount_grams": 20
+                }
               ]
             },
             {
               "day": 2,
               "notes": "",
-              "morning": { "product": "рисовая каша", "amount_grams": 10 },
+              "morning": {
+                "product": "рисовая каша",
+                "amount_grams": 10
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 25 },
-                { "product": "брокколи", "amount_grams": 25 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 25
+                },
+                {
+                  "product": "брокколи",
+                  "amount_grams": 25
+                }
               ]
             },
             {
               "day": 3,
               "notes": "",
-              "morning": { "product": "рисовая каша", "amount_grams": 20 },
-              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+              "morning": {
+                "product": "рисовая каша",
+                "amount_grams": 20
+              },
+              "lunch": [
+                {
+                  "product": "брокколи",
+                  "amount_grams": 50
+                }
+              ]
             },
             {
               "day": 4,
               "notes": "",
-              "morning": { "product": "рисовая каша", "amount_grams": 30 },
+              "morning": {
+                "product": "рисовая каша",
+                "amount_grams": 30
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 25 },
-                { "product": "гречневая каша", "amount_grams": 25 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 25
+                },
+                {
+                  "product": "гречневая каша",
+                  "amount_grams": 25
+                }
               ]
             },
             {
               "day": 5,
               "notes": "",
-              "morning": { "product": "рисовая каша", "amount_grams": 40 },
+              "morning": {
+                "product": "рисовая каша",
+                "amount_grams": 40
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 25 },
-                { "product": "брокколи", "amount_grams": 25 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 25
+                },
+                {
+                  "product": "брокколи",
+                  "amount_grams": 25
+                }
               ]
             },
             {
               "day": 6,
               "notes": "",
-              "morning": { "product": "рисовая каша", "amount_grams": 50 },
-              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+              "morning": {
+                "product": "рисовая каша",
+                "amount_grams": 50
+              },
+              "lunch": [
+                {
+                  "product": "брокколи",
+                  "amount_grams": 50
+                }
+              ]
             },
             {
               "day": 7,
               "notes": "",
-              "morning": { "product": "рисовая каша", "amount_grams": 60 },
+              "morning": {
+                "product": "рисовая каша",
+                "amount_grams": 60
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 25 },
-                { "product": "гречневая каша", "amount_grams": 25 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 25
+                },
+                {
+                  "product": "гречневая каша",
+                  "amount_grams": 25
+                }
               ]
             }
           ]
@@ -187,58 +307,119 @@
             {
               "day": 1,
               "notes": "",
-              "morning": { "product": "кукурузная каша", "amount_grams": 5 },
+              "morning": {
+                "product": "кукурузная каша",
+                "amount_grams": 5
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 30 },
-                { "product": "брокколи", "amount_grams": 20 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 30
+                },
+                {
+                  "product": "брокколи",
+                  "amount_grams": 20
+                }
               ]
             },
             {
               "day": 2,
               "notes": "",
-              "morning": { "product": "кукурузная каша", "amount_grams": 10 },
+              "morning": {
+                "product": "кукурузная каша",
+                "amount_grams": 10
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 25 },
-                { "product": "гречневая каша", "amount_grams": 25 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 25
+                },
+                {
+                  "product": "гречневая каша",
+                  "amount_grams": 25
+                }
               ]
             },
             {
               "day": 3,
               "notes": "",
-              "morning": { "product": "кукурузная каша", "amount_grams": 20 },
-              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+              "morning": {
+                "product": "кукурузная каша",
+                "amount_grams": 20
+              },
+              "lunch": [
+                {
+                  "product": "брокколи",
+                  "amount_grams": 50
+                }
+              ]
             },
             {
               "day": 4,
               "notes": "",
-              "morning": { "product": "кукурузная каша", "amount_grams": 30 },
+              "morning": {
+                "product": "кукурузная каша",
+                "amount_grams": 30
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 25 },
-                { "product": "рисовая каша", "amount_grams": 25 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 25
+                },
+                {
+                  "product": "рисовая каша",
+                  "amount_grams": 25
+                }
               ]
             },
             {
               "day": 5,
               "notes": "",
-              "morning": { "product": "кукурузная каша", "amount_grams": 40 },
+              "morning": {
+                "product": "кукурузная каша",
+                "amount_grams": 40
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 25 },
-                { "product": "брокколи", "amount_grams": 25 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 25
+                },
+                {
+                  "product": "брокколи",
+                  "amount_grams": 25
+                }
               ]
             },
             {
               "day": 6,
               "notes": "",
-              "morning": { "product": "кукурузная каша", "amount_grams": 50 },
-              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+              "morning": {
+                "product": "кукурузная каша",
+                "amount_grams": 50
+              },
+              "lunch": [
+                {
+                  "product": "брокколи",
+                  "amount_grams": 50
+                }
+              ]
             },
             {
               "day": 7,
               "notes": "",
-              "morning": { "product": "кукурузная каша", "amount_grams": 60 },
+              "morning": {
+                "product": "кукурузная каша",
+                "amount_grams": 60
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 25 },
-                { "product": "гречневая каша", "amount_grams": 25 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 25
+                },
+                {
+                  "product": "гречневая каша",
+                  "amount_grams": 25
+                }
               ]
             }
           ]
@@ -252,58 +433,119 @@
             {
               "day": 1,
               "notes": "",
-              "morning": { "product": "яблоко", "amount_grams": 5 },
+              "morning": {
+                "product": "яблоко",
+                "amount_grams": 5
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 30 },
-                { "product": "гречневая каша", "amount_grams": 25 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 30
+                },
+                {
+                  "product": "гречневая каша",
+                  "amount_grams": 25
+                }
               ]
             },
             {
               "day": 2,
               "notes": "",
-              "morning": { "product": "яблоко", "amount_grams": 10 },
+              "morning": {
+                "product": "яблоко",
+                "amount_grams": 10
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 25 },
-                { "product": "брокколи", "amount_grams": 25 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 25
+                },
+                {
+                  "product": "брокколи",
+                  "amount_grams": 25
+                }
               ]
             },
             {
               "day": 3,
               "notes": "",
-              "morning": { "product": "яблоко", "amount_grams": 15 },
-              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+              "morning": {
+                "product": "яблоко",
+                "amount_grams": 15
+              },
+              "lunch": [
+                {
+                  "product": "брокколи",
+                  "amount_grams": 50
+                }
+              ]
             },
             {
               "day": 4,
               "notes": "",
-              "morning": { "product": "груша", "amount_grams": 5 },
+              "morning": {
+                "product": "груша",
+                "amount_grams": 5
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 25 },
-                { "product": "рисовая каша", "amount_grams": 25 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 25
+                },
+                {
+                  "product": "рисовая каша",
+                  "amount_grams": 25
+                }
               ]
             },
             {
               "day": 5,
               "notes": "",
-              "morning": { "product": "груша", "amount_grams": 10 },
+              "morning": {
+                "product": "груша",
+                "amount_grams": 10
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 25 },
-                { "product": "брокколи", "amount_grams": 25 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 25
+                },
+                {
+                  "product": "брокколи",
+                  "amount_grams": 25
+                }
               ]
             },
             {
               "day": 6,
               "notes": "",
-              "morning": { "product": "груша", "amount_grams": 20 },
-              "lunch": [{ "product": "брокколи", "amount_grams": 50 }]
+              "morning": {
+                "product": "груша",
+                "amount_grams": 20
+              },
+              "lunch": [
+                {
+                  "product": "брокколи",
+                  "amount_grams": 50
+                }
+              ]
             },
             {
               "day": 7,
               "notes": "",
-              "morning": { "product": "яблоко", "amount_grams": 30 },
+              "morning": {
+                "product": "яблоко",
+                "amount_grams": 30
+              },
               "lunch": [
-                { "product": "кабачок", "amount_grams": 25 },
-                { "product": "кукурузная каша", "amount_grams": 25 }
+                {
+                  "product": "кабачок",
+                  "amount_grams": 25
+                },
+                {
+                  "product": "кукурузная каша",
+                  "amount_grams": 25
+                }
               ]
             }
           ]
@@ -326,9 +568,609 @@
     },
     {
       "month": 7,
-      "status": "planned",
-      "planned_additions": ["мясо", "желток", "расширение фруктов"],
-      "notes": "заполните структуру месяца по той же схеме, что и month 6"
+      "feeding_type": "грудное вскармливание + овощи + каши + фрукты + мясо",
+      "approach": "расширение рациона с акцентом на белок и контроль переносимости",
+      "breastfeeding": {
+        "on_demand": true,
+        "priority": "остается значимой частью питания",
+        "after_solids": "предлагать после основных приемов пищи"
+      },
+      "signs_of_readiness": [
+        "Стабильно ест 2–3 приема прикорма",
+        "Хорошо глотает более густую пищу",
+        "Проявляет интерес к разнообразной пище"
+      ],
+      "nutrition_goals": {
+        "main_goal": "введение белка (мясо) и увеличение плотности рациона",
+        "texture": "густое пюре, допускаются мягкие неоднородности",
+        "caloric_shift": "постепенный переход от ГВ к смешанному питанию"
+      },
+      "safety_rules": [
+        "Новый продукт вводится 1 раз в 3 дня",
+        "Мясо вводится отдельно от новых продуктов",
+        "Не вводить более 2 новых продуктов в неделю",
+        "Сохранять контроль — не смешивать новые продукты",
+        "Следить за стулом при введении мяса и каш"
+      ],
+      "feeding_schedule": {
+        "meals_per_day": 3,
+        "meal_slots": [
+          {
+            "name": "morning",
+            "time": "08:00-10:00",
+            "purpose": "каша / новый продукт",
+            "structure": "каша + грудное молоко"
+          },
+          {
+            "name": "lunch",
+            "time": "12:00-14:00",
+            "purpose": "основной прием пищи",
+            "structure": "овощи + мясо + масло"
+          },
+          {
+            "name": "evening",
+            "time": "16:00-18:00",
+            "purpose": "фрукты или легкая еда",
+            "structure": "фрукты или овощи"
+          }
+        ]
+      },
+      "allowed_products": {
+        "vegetables": ["кабачок", "брокколи", "цветная капуста", "тыква", "морковь", "картофель"],
+        "cereals": ["гречневая", "рисовая", "кукурузная"],
+        "fruits": ["яблоко", "груша"],
+        "meat": ["индейка", "кролик", "курица"]
+      },
+      "introduction_plan": [
+        {
+          "week": 1,
+          "focus": "введение мяса (индейка)",
+          "notes": "Мясо смешивается с овощами после 3 дня",
+          "days": [
+            {
+              "day": 1,
+              "notes": "гречневая каша, 70-100 г",
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "индейка",
+                  "amount_grams": 5
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 50
+              }
+            },
+            {
+              "day": 2,
+              "notes": "рисовая каша, 70-90 г",
+              "morning": {
+                "product": "рисовая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "индейка",
+                  "amount_grams": 10
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 50
+              }
+            },
+            {
+              "day": 3,
+              "notes": "кукурузная каша, 70-100 г",
+              "morning": {
+                "product": "кукурузная каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "индейка",
+                  "amount_grams": 20
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 60
+              }
+            },
+            {
+              "day": 4,
+              "notes": "гречневая каша, 80-100 г",
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "индейка",
+                  "amount_grams": 30
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 60
+              }
+            },
+            {
+              "day": 5,
+              "notes": "рисовая каша, 70-90 г",
+              "morning": {
+                "product": "рисовая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "индейка",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 70
+              }
+            },
+            {
+              "day": 6,
+              "notes": "кукурузная каша, 80-100 г",
+              "morning": {
+                "product": "кукурузная каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "индейка",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 70
+              }
+            },
+            {
+              "day": 7,
+              "notes": "гречневая каша, 80-100 г",
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "индейка",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 70
+              }
+            }
+          ]
+        },
+        {
+          "week": 2,
+          "focus": "введение кролика",
+          "notes": "индейка уже безопасна",
+          "days": [
+            {
+              "day": 1,
+              "notes": "гречневая каша, 70-100 г",
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "кролик",
+                  "amount_grams": 5
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 50
+              }
+            },
+            {
+              "day": 2,
+              "notes": "рисовая каша, 70-90 г",
+              "morning": {
+                "product": "рисовая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "кролик",
+                  "amount_grams": 10
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 50
+              }
+            },
+            {
+              "day": 3,
+              "notes": "кукурузная каша, 70-100 г",
+              "morning": {
+                "product": "кукурузная каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "кролик",
+                  "amount_grams": 20
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 60
+              }
+            },
+            {
+              "day": 4,
+              "notes": "гречневая каша, 80-100 г",
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "кролик",
+                  "amount_grams": 30
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 60
+              }
+            },
+            {
+              "day": 5,
+              "notes": "рисовая каша, 70-90 г",
+              "morning": {
+                "product": "рисовая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "кролик",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 70
+              }
+            },
+            {
+              "day": 6,
+              "notes": "кукурузная каша, 80-100 г",
+              "morning": {
+                "product": "кукурузная каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "кролик",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 70
+              }
+            },
+            {
+              "day": 7,
+              "notes": "гречневая каша, 80-100 г",
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "кролик",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 70
+              }
+            }
+          ]
+        },
+        {
+          "week": 3,
+          "focus": "расширение фруктов и овощей",
+          "notes": "добавление новых комбинаций",
+          "days": [
+            {
+              "day": 1,
+              "notes": "гречневая каша, 70-100 г",
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "индейка",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "яблоко",
+                "amount_grams": 50
+              }
+            },
+            {
+              "day": 2,
+              "notes": "рисовая каша, 70-90 г",
+              "morning": {
+                "product": "рисовая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "кролик",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "груша",
+                "amount_grams": 50
+              }
+            },
+            {
+              "day": 3,
+              "notes": "кукурузная каша, 70-100 г",
+              "morning": {
+                "product": "кукурузная каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "индейка",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "яблоко",
+                "amount_grams": 60
+              }
+            },
+            {
+              "day": 4,
+              "notes": "гречневая каша, 80-100 г",
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "кролик",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "груша",
+                "amount_grams": 60
+              }
+            },
+            {
+              "day": 5,
+              "notes": "рисовая каша, 70-90 г",
+              "morning": {
+                "product": "рисовая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "индейка",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "яблоко",
+                "amount_grams": 70
+              }
+            },
+            {
+              "day": 6,
+              "notes": "кукурузная каша, 80-100 г",
+              "morning": {
+                "product": "кукурузная каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "кролик",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "груша",
+                "amount_grams": 70
+              }
+            },
+            {
+              "day": 7,
+              "notes": "гречневая каша, 80-100 г",
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "индейка",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "яблоко",
+                "amount_grams": 70
+              }
+            }
+          ]
+        },
+        {
+          "week": 4,
+          "focus": "введение курицы",
+          "notes": "при отсутствии реакций",
+          "days": [
+            {
+              "day": 1,
+              "notes": "гречневая каша, 70-100 г",
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "курица",
+                  "amount_grams": 5
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 50
+              }
+            },
+            {
+              "day": 2,
+              "notes": "рисовая каша, 70-90 г",
+              "morning": {
+                "product": "рисовая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "курица",
+                  "amount_grams": 10
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 50
+              }
+            },
+            {
+              "day": 3,
+              "notes": "кукурузная каша, 70-100 г",
+              "morning": {
+                "product": "кукурузная каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "курица",
+                  "amount_grams": 20
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 60
+              }
+            },
+            {
+              "day": 4,
+              "notes": "гречневая каша, 80-100 г",
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "курица",
+                  "amount_grams": 30
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 60
+              }
+            },
+            {
+              "day": 5,
+              "notes": "рисовая каша, 70-90 г",
+              "morning": {
+                "product": "рисовая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "курица",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 70
+              }
+            },
+            {
+              "day": 6,
+              "notes": "кукурузная каша, 80-100 г",
+              "morning": {
+                "product": "кукурузная каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "курица",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 70
+              }
+            },
+            {
+              "day": 7,
+              "notes": "гречневая каша, 80-100 г",
+              "morning": {
+                "product": "гречневая каша",
+                "amount_grams": 70
+              },
+              "lunch": [
+                {
+                  "product": "курица",
+                  "amount_grams": 40
+                }
+              ],
+              "evening": {
+                "product": "фрукты",
+                "amount_grams": 70
+              }
+            }
+          ]
+        }
+      ],
+      "portion_guidelines": {
+        "porridge_grams": "70–120",
+        "vegetables_grams": "60–100",
+        "meat_grams": "30–50",
+        "fruits_grams": "50–70"
+      },
+      "common_mistakes": [
+        "слишком быстрое увеличение мяса",
+        "замена грудного молока прикормом",
+        "введение нескольких новых продуктов одновременно",
+        "перекорм кашами"
+      ],
+      "next_month_placeholder": {
+        "month": 8,
+        "planned_additions": ["желток", "кисломолочные продукты", "расширение текстур (кусочки)"]
+      }
     }
   ]
 }

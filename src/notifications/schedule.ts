@@ -99,6 +99,18 @@ export async function cancelAllScheduledNotifications(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
+export async function cancelDailyPlanNotifications(): Promise<void> {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  for (const n of scheduled) {
+    if (
+      n.content.data &&
+      (n.content.data as Record<string, unknown>).tag === PLAN_NOTIFICATION_TAG
+    ) {
+      await Notifications.cancelScheduledNotificationAsync(n.identifier);
+    }
+  }
+}
+
 export async function rescheduleAllReminders(
   updateReminderNotificationId: (id: string, notificationId: string) => Promise<void>,
 ): Promise<void> {
@@ -109,7 +121,6 @@ export async function rescheduleAllReminders(
     const notificationId = await scheduleReminder(r);
     if (notificationId) await updateReminderNotificationId(r.id, notificationId);
   }
-  await scheduleDailyPlanNotification();
 }
 
 const PLAN_NOTIFICATION_DAYS_AHEAD = 14;
