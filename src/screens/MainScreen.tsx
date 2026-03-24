@@ -8,6 +8,7 @@ import {
   Modal,
   TouchableOpacity,
   Platform,
+  TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
@@ -39,6 +40,15 @@ export function MainScreen() {
     getScheduleForDay,
     progressDateStr,
     updateAllPlanDaysTime,
+    shiftMealTypeTimeline,
+    shiftProductTimeline,
+    toggleMealEatenForDate,
+    isMealEaten,
+    dayEatenByDate,
+    shiftedMealsByDate,
+    displacedByDate,
+    revertShiftAtSlot,
+    replaceShiftedMealAtSlot,
   } = useSchedule();
 
   const tipPickedRef = useRef(false);
@@ -46,6 +56,17 @@ export function MainScreen() {
   const [changeTimeModalVisible, setChangeTimeModalVisible] = React.useState(false);
   const [changeTimeValue, setChangeTimeValue] = React.useState(() => new Date());
   const [showTimePicker, setShowTimePicker] = React.useState(false);
+  const [shiftModalVisible, setShiftModalVisible] = React.useState(false);
+  const [shiftMode, setShiftMode] = React.useState<"meal" | "product">("meal");
+  const [shiftMealType, setShiftMealType] = React.useState<"morning" | "lunch" | "evening">("morning");
+  const [shiftProduct, setShiftProduct] = React.useState("");
+  const [shiftDaysText, setShiftDaysText] = React.useState("1");
+  const [shifting, setShifting] = React.useState(false);
+  const [replaceModalVisible, setReplaceModalVisible] = React.useState(false);
+  const [replaceMealType, setReplaceMealType] = React.useState<"morning" | "lunch" | "evening">("morning");
+  const [replaceProduct, setReplaceProduct] = React.useState("");
+  const [replaceAmountText, setReplaceAmountText] = React.useState("0");
+  const [replacing, setReplacing] = React.useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -77,16 +98,26 @@ export function MainScreen() {
 
   const orderedMeals = useMemo(() => {
     const dayPlan = remoteDayPlans.find((d) => d.date === progressDateStr);
-    if (!dayPlan?.meals?.length) return [];
+    const displaced = displacedByDate[progressDateStr] ?? {};
     const order = { morning: 0, lunch: 1, evening: 2 } as const;
-    return [...dayPlan.meals]
+    const normal = [...(dayPlan?.meals ?? [])]
       .map((meal) => ({
         type: meal.mealType,
         items: [{ product: meal.product, amount_grams: meal.amountGrams }],
         time: undefined as string | undefined,
+        skeleton: false,
       }))
       .sort((a, b) => order[a.type] - order[b.type]);
-  }, [progressDateStr, remoteDayPlans]);
+    const skeletons = (["morning", "lunch", "evening"] as const)
+      .filter((type) => !!displaced[type])
+      .map((type) => ({
+        type,
+        items: [] as Array<{ product: string; amount_grams: number }>,
+        time: undefined as string | undefined,
+        skeleton: true,
+      }));
+    return [...normal, ...skeletons].sort((a, b) => order[a.type] - order[b.type]);
+  }, [displacedByDate, progressDateStr, remoteDayPlans]);
 
   const mealLabel = useCallback(
     (type: "morning" | "lunch" | "evening") => {
@@ -96,6 +127,55 @@ export function MainScreen() {
     },
     [t],
   );
+
+  const openShiftModal = useCallback(
+    (type: "morning" | "lunch" | "evening", product?: string) => {
+      setShiftMealType(type);
+      setShiftProduct(product ?? "");
+      setShiftMode(product ? "product" : "meal");
+      setShiftDaysText("1");
+      setShiftModalVisible(true);
+    },
+    [],
+  );
+
+  const saveShift = useCallback(async () => {
+    const days = parseInt(shiftDaysText.trim(), 10);
+    if (!Number.isFinite(days) || days === 0) return;
+    setShifting(true);
+    if (shiftMode === "meal") {
+      await shiftMealTypeTimeline(shiftMealType, days, progressDateStr);
+    } else {
+      await shiftProductTimeline(shiftMealType, shiftProduct, days, progressDateStr);
+    }
+    setShifting(false);
+    setShiftModalVisible(false);
+  }, [
+    progressDateStr,
+    shiftDaysText,
+    shiftMealType,
+    shiftMode,
+    shiftProduct,
+    shiftMealTypeTimeline,
+    shiftProductTimeline,
+  ]);
+
+  const openReplaceModal = useCallback((mealType: "morning" | "lunch" | "evening") => {
+    const displaced = displacedByDate[progressDateStr]?.[mealType]?.meal;
+    setReplaceMealType(mealType);
+    setReplaceProduct(displaced?.product ?? "");
+    setReplaceAmountText(String(displaced?.amountGrams ?? 0));
+    setReplaceModalVisible(true);
+  }, [displacedByDate, progressDateStr]);
+
+  const saveReplacement = useCallback(async () => {
+    const amount = parseInt(replaceAmountText.trim(), 10);
+    if (!replaceProduct.trim() || !Number.isFinite(amount) || amount < 0) return;
+    setReplacing(true);
+    await replaceShiftedMealAtSlot(progressDateStr, replaceMealType, replaceProduct, amount);
+    setReplacing(false);
+    setReplaceModalVisible(false);
+  }, [progressDateStr, replaceAmountText, replaceMealType, replaceProduct, replaceShiftedMealAtSlot]);
 
   const todayStr = useMemo(() => {
     const now = new Date(progressDateStr + "T00:00:00");
@@ -218,21 +298,85 @@ export function MainScreen() {
 
       {orderedMeals.length ? (
         orderedMeals.map((meal, index) => (
-          <View key={`${meal.type}-${meal.items.map((x) => x.product).join("+")}-${index}`} style={styles.mainCard}>
+          <View
+            key={`${meal.type}-${meal.items.map((x) => x.product).join("+")}-${index}`}
+            style={[
+              styles.mainCard,
+              meal.skeleton && { backgroundColor: colors.pastelOrange, borderWidth: 1, borderColor: colors.border },
+              dayEatenByDate[progressDateStr]
+                ? { backgroundColor: colors.pastelGreen }
+                : isMealEaten(progressDateStr, meal.type)
+                  ? { backgroundColor: colors.pastelYellow }
+                  : undefined,
+            ]}
+          >
             <Text style={styles.foodTypeLabel}>{mealLabel(meal.type)}</Text>
-            <Text style={styles.foodName}>{meal.items.map((x) => x.product).join(" + ")}</Text>
+            <Text style={styles.foodName}>
+              {meal.skeleton ? t("mainShiftSkeletonTitle") : meal.items.map((x) => x.product).join(" + ")}
+            </Text>
             <View style={styles.detailsRow}>
-              <View style={styles.detailBadge}>
-                <Text style={styles.detailBadgeText}>
-                  {meal.items.reduce((s, x) => s + x.amount_grams, 0)}
-                  {t("mainGrams")}
-                </Text>
-              </View>
+              {!meal.skeleton ? (
+                <View style={styles.detailBadge}>
+                  <Text style={styles.detailBadgeText}>
+                    {meal.items.reduce((s, x) => s + x.amount_grams, 0)}
+                    {t("mainGrams")}
+                  </Text>
+                </View>
+              ) : null}
               {meal.time ? (
                 <View style={styles.detailBadge}>
                   <Text style={styles.detailBadgeText}>⏰ {meal.time}</Text>
                 </View>
               ) : null}
+              {shiftedMealsByDate[progressDateStr]?.[meal.type] ? (
+                <View style={styles.detailBadge}>
+                  <Text style={styles.detailBadgeText}>{t("mainShifted")}</Text>
+                </View>
+              ) : null}
+              {isMealEaten(progressDateStr, meal.type) ? (
+                <View style={styles.detailBadge}>
+                  <Text style={styles.detailBadgeText}>{t("mainEaten")}</Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.actionsRow}>
+              {meal.skeleton ? (
+                <>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionBtnShift, { borderColor: colors.border }]}
+                    onPress={() => revertShiftAtSlot(progressDateStr, meal.type)}
+                  >
+                    <Text style={styles.actionBtnText}>{t("mainShiftRevert")}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionBtnEaten]}
+                    onPress={() => openReplaceModal(meal.type)}
+                  >
+                    <Text style={styles.actionBtnText}>{t("mainShiftReplace")}</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionBtnShift, { borderColor: colors.border }]}
+                    onPress={() => openShiftModal(meal.type, meal.items[0]?.product)}
+                  >
+                    <Text style={styles.actionBtnText}>{t("mainShiftModeMeal")}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.actionBtn,
+                      styles.actionBtnEaten,
+                      isMealEaten(progressDateStr, meal.type) && { backgroundColor: colors.pastelGreen },
+                    ]}
+                    onPress={() => toggleMealEatenForDate(progressDateStr, meal.type)}
+                  >
+                    <Text style={styles.actionBtnText}>
+                      {isMealEaten(progressDateStr, meal.type) ? t("mainUnsetEaten") : t("mainSetEaten")}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </View>
         ))
@@ -356,6 +500,107 @@ export function MainScreen() {
           </View>
         </View>
       </Modal>
+      <Modal visible={shiftModalVisible} animationType="slide" transparent>
+        <View style={g.modalOverlay}>
+          <View style={g.modal}>
+            <Text style={g.modalTitle}>{t("mainShiftMealProductTitle")}</Text>
+            <View style={styles.detailsRow}>
+              <TouchableOpacity
+                style={styles.detailBadge}
+                onPress={() => setShiftMode("meal")}
+              >
+                <Text style={styles.detailBadgeText}>
+                  {shiftMode === "meal" ? t("mainShiftModeMealSelected") : t("mainShiftModeMeal")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.detailBadge}
+                onPress={() => setShiftMode("product")}
+              >
+                <Text style={styles.detailBadgeText}>
+                  {shiftMode === "product" ? t("mainShiftModeProductSelected") : t("mainShiftModeProduct")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {shiftMode === "product" ? (
+              <>
+                <Text style={styles.inputLabel}>{t("mainShiftProductLabel")}</Text>
+                <TextInput
+                  style={[g.input, { marginTop: 8, color: colors.text, backgroundColor: colors.card }]}
+                  value={shiftProduct}
+                  onChangeText={setShiftProduct}
+                  placeholder={t("mainShiftProductPlaceholder")}
+                  placeholderTextColor={colors.textMuted}
+                  selectionColor={colors.primary}
+                />
+              </>
+            ) : null}
+            <Text style={[styles.inputLabel, { marginTop: 12 }]}>{t("mainShiftDaysLabel")}</Text>
+            <TextInput
+              style={[g.input, { marginTop: 8, color: colors.text, backgroundColor: colors.card }]}
+              value={shiftDaysText}
+              onChangeText={setShiftDaysText}
+              keyboardType="numeric"
+              placeholder={t("mainShiftDaysPlaceholder")}
+              placeholderTextColor={colors.textMuted}
+              selectionColor={colors.primary}
+            />
+            <View style={[g.modalButtons, { marginTop: 12 }]}>
+              <TouchableOpacity
+                style={g.cancelBtn}
+                onPress={() => setShiftModalVisible(false)}
+              >
+                <Text style={g.cancelBtnText}>{t("remindersCancel")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[g.saveBtn, shifting && g.buttonDisabled]}
+                onPress={saveShift}
+                disabled={shifting}
+              >
+                <Text style={g.saveBtnText}>{shifting ? t("mainShiftSaving") : t("mainShiftApply")}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={replaceModalVisible} animationType="slide" transparent>
+        <View style={g.modalOverlay}>
+          <View style={g.modal}>
+            <Text style={g.modalTitle}>{t("mainShiftReplaceTitle")}</Text>
+            <Text style={styles.inputLabel}>{t("mainShiftProductLabel")}</Text>
+            <TextInput
+              style={[g.input, { marginTop: 8, color: colors.text, backgroundColor: colors.card }]}
+              value={replaceProduct}
+              onChangeText={setReplaceProduct}
+              placeholder={t("mainShiftProductPlaceholder")}
+              placeholderTextColor={colors.textMuted}
+              selectionColor={colors.primary}
+            />
+            <Text style={[styles.inputLabel, { marginTop: 12 }]}>{t("mainShiftAmountLabel")}</Text>
+            <TextInput
+              style={[g.input, { marginTop: 8, color: colors.text, backgroundColor: colors.card }]}
+              value={replaceAmountText}
+              onChangeText={setReplaceAmountText}
+              keyboardType="numeric"
+              placeholder={t("loadDataAmount")}
+              placeholderTextColor={colors.textMuted}
+              selectionColor={colors.primary}
+            />
+            <View style={[g.modalButtons, { marginTop: 12 }]}>
+              <TouchableOpacity style={g.cancelBtn} onPress={() => setReplaceModalVisible(false)}>
+                <Text style={g.cancelBtnText}>{t("remindersCancel")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[g.saveBtn, replacing && g.buttonDisabled]}
+                onPress={saveReplacement}
+                disabled={replacing}
+              >
+                <Text style={g.saveBtnText}>{replacing ? t("mainShiftSaving") : t("mainShiftApply")}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -427,6 +672,32 @@ function useLocalStyles(colors: {
           flexWrap: "wrap",
           justifyContent: "center",
         },
+        actionsRow: {
+          width: "100%",
+          marginTop: 12,
+          gap: 10,
+        },
+        actionBtn: {
+          width: "100%",
+          borderRadius: spacing.radiusMd,
+          paddingVertical: 10,
+          paddingHorizontal: 12,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        actionBtnShift: {
+          backgroundColor: colors.chipBg,
+          borderWidth: 1,
+        },
+        actionBtnEaten: {
+          backgroundColor: colors.pastelYellow,
+        },
+        actionBtnText: {
+          fontSize: 14,
+          color: colors.text,
+          fontFamily: fonts.medium,
+          textAlign: "center",
+        },
         detailBadge: {
           backgroundColor: colors.chipBg,
           paddingVertical: 6,
@@ -444,6 +715,11 @@ function useLocalStyles(colors: {
           marginBottom: 20,
         },
         timeLabel: { marginRight: 12 },
+        inputLabel: {
+          fontSize: 13,
+          color: colors.textMuted,
+          fontFamily: fonts.medium,
+        },
         section: {
           marginHorizontal: spacing.screenPadding,
           marginBottom: 16,

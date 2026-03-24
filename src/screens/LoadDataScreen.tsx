@@ -432,7 +432,19 @@ export function LoadDataScreen() {
   const remote = useRemoteFeedContext();
   const styles = useLocalStyles(colors);
 
-  const { schedules, loading, refresh, getDaysForSchedule, todayPlan, progressDateStr, setProgressDate, remoteDayPlans } = useSchedule();
+  const {
+    schedules,
+    loading,
+    refresh,
+    getDaysForSchedule,
+    todayPlan,
+    progressDateStr,
+    setProgressDate,
+    remoteDayPlans,
+    isMealEaten,
+    dayEatenByDate,
+    shiftedMealsByDate,
+  } = useSchedule();
 
   const availableSchedules = schedules;
 
@@ -893,6 +905,7 @@ export function LoadDataScreen() {
                     style={[
                       styles.dayCard,
                       { borderColor: colors.borderLight, backgroundColor: colors.card },
+                      dayEatenByDate[d.date] && { backgroundColor: colors.chipSelectedBg },
                       isProgress && { backgroundColor: colors.chipSelectedBg },
                     ]}
                     onLayout={(e) => {
@@ -904,22 +917,32 @@ export function LoadDataScreen() {
                       <Text style={[styles.dayCardDate, { color: colors.text }]}>
                         {selectedStartDate ? `${t("loadDataDay")} ${dayIndexFromStart(selectedStartDate, d.date)}` : formatDateDisplay(d.date, locale)}
                       </Text>
-                      {isProgress ? (
-                        <Text style={[styles.dayCardBadge, { color: colors.primary }]}>{t("loadDataCurrentDay")}</Text>
-                      ) : (
-                        <TouchableOpacity
-                          style={[styles.setCurrentBtn, { borderColor: colors.borderLight, backgroundColor: colors.card }]}
-                          onPress={() => setProgressDate(d.date)}
-                        >
-                          <Text style={[styles.setCurrentBtnText, { color: colors.primary }]}>{t("loadDataCurrentDay")}</Text>
-                        </TouchableOpacity>
-                      )}
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        {dayEatenByDate[d.date] ? (
+                          <Text style={[styles.dayCardBadge, { color: colors.primary }]}>{t("loadDataDayComplete")}</Text>
+                        ) : null}
+                        {shiftedMealsByDate[d.date] ? (
+                          <Text style={[styles.dayCardBadge, { color: colors.textMuted }]}>{t("loadDataShifted")}</Text>
+                        ) : null}
+                        {isProgress ? (
+                          <Text style={[styles.dayCardBadge, { color: colors.primary }]}>{t("loadDataCurrentDay")}</Text>
+                        ) : (
+                          <TouchableOpacity
+                            style={[styles.setCurrentBtn, { borderColor: colors.borderLight, backgroundColor: colors.card }]}
+                            onPress={() => setProgressDate(d.date)}
+                          >
+                            <Text style={[styles.setCurrentBtnText, { color: colors.primary }]}>{t("loadDataCurrentDay")}</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     </View>
 
                     <View style={styles.fieldsWrap}>
                       {hasBreakfast ? (
                       <View style={[styles.field, styles.fieldFull]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("mealBreakfast")}</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
+                          {t("mealBreakfast")}{isMealEaten(d.date, "morning") ? ` · ${t("loadDataMealEatenSuffix")}` : ""}
+                        </Text>
                         <TextInput
                           style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
                           value={d.food}
@@ -946,7 +969,9 @@ export function LoadDataScreen() {
 
                       {hasLunch ? (
                       <View style={[styles.field, styles.fieldFull]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("mealLunch")}</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
+                          {t("mealLunch")}{isMealEaten(d.date, "lunch") ? ` · ${t("loadDataMealEatenSuffix")}` : ""}
+                        </Text>
                         <TextInput
                           style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
                           value={mealMeta.lunchFood}
@@ -977,7 +1002,9 @@ export function LoadDataScreen() {
 
                       {hasEvening ? (
                       <View style={[styles.field, styles.fieldFull]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{t("mealEvening")}</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
+                          {t("mealEvening")}{isMealEaten(d.date, "evening") ? ` · ${t("loadDataMealEatenSuffix")}` : ""}
+                        </Text>
                         <TextInput
                           style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
                           value={mealMeta.eveningFood}

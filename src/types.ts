@@ -77,3 +77,25 @@ export interface LoadedSchedule {
   allowedProducts?: string[];
   loadedAt: string;
 }
+
+export type ShiftMode = "mealType" | "product";
+
+export interface ShiftOperation {
+  id: string;
+  mode: ShiftMode;
+  mealType: MealType;
+  shiftDays: number;
+  createdAt: string;
+  fromDate?: string;
+  product?: string;
+}
+
+export type EatenMealsByDate = Record<string, Partial<Record<MealType, boolean>>>;
+
+export interface UserOverlayState {
+  schemaVersion: number;
+  shifts: ShiftOperation[];
+  eatenMealsByDate: EatenMealsByDate;
+  replacementsByDate: Record<string, Partial<Record<MealType, { product: string; amountGrams: number }>>>;
+  updatedAt: string;
+}

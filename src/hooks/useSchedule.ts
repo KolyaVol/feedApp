@@ -24,6 +24,13 @@ import { useRemoteFeedContext } from "../remoteFeed/RemoteFeedContext";
 import {
   remoteScheduleToPlanDays,
 } from "../remoteFeed/deriveToday";
+import {
+  addShiftOperation,
+  getUserOverlay,
+  removeShiftOperation,
+  setReplacementMeal,
+  toggleMealEaten,
+} from "../data/userOverlay";
 
 interface ScheduleJson {
   month: number;
@@ -71,6 +78,106 @@ interface ScheduleJson {
   months?: ScheduleJson[];
 }
 
+type MealType = "morning" | "lunch" | "evening";
+type DayMeal = { mealType: MealType; product: string; amountGrams: number };
+
+function applyShiftOperations(
+  days: DayPlan[],
+  shifts: Array<{
+    id: string;
+    mode: "mealType" | "product";
+    mealType: MealType;
+    shiftDays: number;
+    createdAt: string;
+    fromDate?: string;
+    product?: string;
+  }>,
+  replacementsByDate: Record<string, Partial<Record<MealType, { product: string; amountGrams: number }>>>,
+): {
+  days: DayPlan[];
+  shiftedMealsByDate: Record<string, Partial<Record<MealType, boolean>>>;
+  displacedByDate: Record<string, Partial<Record<MealType, { shiftId: string; meal: DayMeal }>>>;
+} {
+  const next = days.map((d) => ({ ...d, meals: d.meals.map((m) => ({ ...m })) }));
+  const shiftedMealsByDate: Record<string, Partial<Record<MealType, boolean>>> = {};
+  const displacedByDate: Record<string, Partial<Record<MealType, { shiftId: string; meal: DayMeal }>>> = {};
+  const sorted = [...shifts].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  for (const shift of sorted) {
+    const delta = Math.trunc(shift.shiftDays);
+    if (!delta) continue;
+    const targets: Array<{ dayIdx: number; meal: DayMeal }> = [];
+
+    for (let i = 0; i < next.length; i++) {
+      const day = next[i]!;
+      if (shift.fromDate && day.date < shift.fromDate) continue;
+      for (const meal of day.meals) {
+        if (meal.mealType !== shift.mealType) continue;
+        if (shift.mode === "product") {
+          const needle = (shift.product ?? "").trim().toLowerCase();
+          if (!needle) continue;
+          if (meal.product.trim().toLowerCase() !== needle) continue;
+        }
+        targets.push({ dayIdx: i, meal: { ...meal } });
+      }
+    }
+
+    for (const t of targets) {
+      const src = next[t.dayIdx];
+      if (!src) continue;
+      const displacedDate = src.date;
+      const displacedExisting = displacedByDate[displacedDate] ?? {};
+      displacedByDate[displacedDate] = {
+        ...displacedExisting,
+        [t.meal.mealType]: { shiftId: shift.id, meal: { ...t.meal } },
+      };
+      src.meals = src.meals.filter(
+        (m) =>
+          !(
+            m.mealType === t.meal.mealType &&
+            m.product === t.meal.product &&
+            m.amountGrams === t.meal.amountGrams
+          ),
+      );
+    }
+
+    for (const t of targets) {
+      const targetIdx = t.dayIdx + delta;
+      if (targetIdx < 0 || targetIdx >= next.length) continue;
+      const targetDay = next[targetIdx]!;
+      targetDay.meals.push({ ...t.meal });
+      const existing = shiftedMealsByDate[targetDay.date] ?? {};
+      shiftedMealsByDate[targetDay.date] = { ...existing, [t.meal.mealType]: true };
+    }
+  }
+
+  const dateIndex = new Map(next.map((d, i) => [d.date, i] as const));
+  for (const [date, byMeal] of Object.entries(replacementsByDate)) {
+    const idx = dateIndex.get(date);
+    if (idx === undefined) continue;
+    const day = next[idx]!;
+    for (const mealType of ["morning", "lunch", "evening"] as const) {
+      const repl = byMeal?.[mealType];
+      if (!repl) continue;
+      const existingIdx = day.meals.findIndex((m) => m.mealType === mealType);
+      const replacementMeal: DayMeal = {
+        mealType,
+        product: repl.product,
+        amountGrams: repl.amountGrams,
+      };
+      if (existingIdx >= 0) day.meals[existingIdx] = replacementMeal;
+      else day.meals.push(replacementMeal);
+    }
+  }
+
+  for (const day of next) {
+    const order = { morning: 0, lunch: 1, evening: 2 } as const;
+    day.meals.sort((a, b) => order[a.mealType] - order[b.mealType]);
+  }
+
+  return { days: next, shiftedMealsByDate, displacedByDate };
+}
+
 let sharedProgressDateStr: string | null = null;
 const progressDateListeners = new Set<(value: string) => void>();
 const scheduleRefreshListeners = new Set<() => void>();
@@ -98,6 +205,7 @@ export function useSchedule() {
   const remote = useRemoteFeedContext();
   const [planDays, setPlanDaysState] = useState<PlanDay[]>([]);
   const [schedules, setSchedules] = useState<LoadedSchedule[]>([]);
+  const [userOverlay, setUserOverlay] = useState<Awaited<ReturnType<typeof getUserOverlay>> | null>(null);
   const [loading, setLoading] = useState(true);
   const [progressDateStr, setProgressDateStr] = useState(() => {
     if (sharedProgressDateStr) return sharedProgressDateStr;
@@ -164,7 +272,7 @@ export function useSchedule() {
     }
     return all;
   }, [remote?.schedule, remote?.startDate]);
-  const remoteDayPlans = useMemo((): DayPlan[] => {
+  const baseRemoteDayPlans = useMemo((): DayPlan[] => {
     if (!remote?.schedule || !remote.startDate) return [];
     const monthSchedules = remote.schedule.months?.length ? remote.schedule.months : [remote.schedule];
     let index = 0;
@@ -184,6 +292,21 @@ export function useSchedule() {
     }
     return out;
   }, [remote?.schedule, remote?.startDate]);
+  const appliedRemoteOverlay = useMemo(() => {
+    if (!userOverlay) {
+      return {
+        days: baseRemoteDayPlans,
+        shiftedMealsByDate: {} as Record<string, Partial<Record<MealType, boolean>>>,
+        displacedByDate: {} as Record<string, Partial<Record<MealType, { shiftId: string; meal: DayMeal }>>>,
+      };
+    }
+    return applyShiftOperations(
+      baseRemoteDayPlans,
+      userOverlay.shifts,
+      userOverlay.replacementsByDate ?? {},
+    );
+  }, [baseRemoteDayPlans, userOverlay]);
+  const remoteDayPlans = useMemo((): DayPlan[] => appliedRemoteOverlay.days, [appliedRemoteOverlay.days]);
   const remoteToday = useMemo(() => remote?.today ?? null, [remote?.today]);
   const remoteLoadedSchedules = useMemo((): LoadedSchedule[] => {
     if (!remote?.schedule || !remote.startDate || !remotePlanDays.length) return [];
@@ -232,14 +355,41 @@ export function useSchedule() {
     return [...new Set(current)];
   }, [effectivePlanDays, progressDateStr, effectiveSchedules, remote?.schedule?.introduction_plan]);
 
+  const shiftedMealsByDate = useMemo(() => {
+    return appliedRemoteOverlay.shiftedMealsByDate;
+  }, [appliedRemoteOverlay.shiftedMealsByDate]);
+
+  const displacedByDate = useMemo(() => {
+    return appliedRemoteOverlay.displacedByDate;
+  }, [appliedRemoteOverlay.displacedByDate]);
+
+  const eatenMealsByDate = useMemo(() => {
+    return userOverlay?.eatenMealsByDate ?? {};
+  }, [userOverlay]);
+
+  const dayEatenByDate = useMemo(() => {
+    const out: Record<string, boolean> = {};
+    for (const d of remoteDayPlans) {
+      if (!d.meals.length) {
+        out[d.date] = false;
+        continue;
+      }
+      const state = eatenMealsByDate[d.date] ?? {};
+      out[d.date] = d.meals.every((m) => !!state[m.mealType]);
+    }
+    return out;
+  }, [eatenMealsByDate, remoteDayPlans]);
+
   const refresh = useCallback(async () => {
     setLoading(true);
-    const [days, scheds] = await Promise.all([
+    const [days, scheds, overlay] = await Promise.all([
       getPlanDays(),
       getLoadedSchedules(),
+      getUserOverlay(),
     ]);
     setPlanDaysState(days);
     setSchedules(scheds);
+    setUserOverlay(overlay);
     setLoading(false);
   }, []);
 
@@ -411,6 +561,81 @@ export function useSchedule() {
     return allTips[Math.floor(Math.random() * allTips.length)];
   }, [effectiveSchedules]);
 
+  const shiftMealTypeTimeline = useCallback(
+    async (mealType: MealType, shiftDays: number, fromDate?: string): Promise<void> => {
+      const days = Math.trunc(shiftDays);
+      if (!Number.isFinite(days) || days === 0) return;
+      await addShiftOperation({
+        mode: "mealType",
+        mealType,
+        shiftDays: days,
+        fromDate,
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const shiftProductTimeline = useCallback(
+    async (
+      mealType: MealType,
+      product: string,
+      shiftDays: number,
+      fromDate?: string,
+    ): Promise<void> => {
+      const days = Math.trunc(shiftDays);
+      const cleanProduct = product.trim();
+      if (!cleanProduct || !Number.isFinite(days) || days === 0) return;
+      await addShiftOperation({
+        mode: "product",
+        mealType,
+        product: cleanProduct,
+        shiftDays: days,
+        fromDate,
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const toggleMealEatenForDate = useCallback(
+    async (date: string, mealType: MealType): Promise<void> => {
+      await toggleMealEaten(date, mealType);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const isMealEaten = useCallback(
+    (date: string, mealType: MealType): boolean => {
+      return !!eatenMealsByDate[date]?.[mealType];
+    },
+    [eatenMealsByDate],
+  );
+
+  const revertShiftAtSlot = useCallback(
+    async (date: string, mealType: MealType): Promise<void> => {
+      const shiftId = displacedByDate[date]?.[mealType]?.shiftId;
+      if (!shiftId) return;
+      await removeShiftOperation(shiftId);
+      await refresh();
+    },
+    [displacedByDate, refresh],
+  );
+
+  const replaceShiftedMealAtSlot = useCallback(
+    async (
+      date: string,
+      mealType: MealType,
+      product: string,
+      amountGrams: number,
+    ): Promise<void> => {
+      await setReplacementMeal(date, mealType, product, amountGrams);
+      await refresh();
+    },
+    [refresh],
+  );
+
   return {
     planDays: effectivePlanDays,
     schedules: effectiveSchedules,
@@ -431,5 +656,14 @@ export function useSchedule() {
     updateAllPlanDaysTime,
     getDaysForSchedule,
     getRandomSafetyTip,
+    shiftMealTypeTimeline,
+    shiftProductTimeline,
+    toggleMealEatenForDate,
+    isMealEaten,
+    shiftedMealsByDate,
+    dayEatenByDate,
+    displacedByDate,
+    revertShiftAtSlot,
+    replaceShiftedMealAtSlot,
   };
 }
