@@ -32,7 +32,7 @@ export function CalculatorScreen() {
   const { colors } = useTheme();
   const { hideSubstitutions } = usePreferences();
   const styles = useLocalStyles(colors);
-  const { planDays, schedules, loading, refresh } = useSchedule();
+  const { planDays, schedules, loading, refresh, remoteDayPlans } = useSchedule();
   const [packageSizes, setPackageSizes] = useState<Record<string, string>>({});
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
 
@@ -69,6 +69,43 @@ export function CalculatorScreen() {
   }, [planDays, selectedSchedule]);
 
   const foods: FoodSummary[] = useMemo(() => {
+    const isRemoteSchedule = selectedSchedule?.id.startsWith("remote-");
+    if (isRemoteSchedule && selectedSchedule) {
+      const labelByMealType = {
+        morning: t("mealBreakfast"),
+        lunch: t("mealLunch"),
+        evening: t("mealEvening"),
+      } as const;
+      const map: Record<
+        string,
+        { foodType: string; totalGrams: number; subs: Set<string> }
+      > = {};
+      const daysInSchedule = remoteDayPlans.filter(
+        (day) => day.date >= selectedSchedule.startDate && day.date <= selectedSchedule.endDate,
+      );
+      for (const day of daysInSchedule) {
+        for (const meal of day.meals) {
+          const key = meal.product.toLowerCase();
+          if (!map[key]) {
+            map[key] = {
+              foodType: labelByMealType[meal.mealType],
+              totalGrams: 0,
+              subs: new Set(),
+            };
+          }
+          map[key].totalGrams += meal.amountGrams;
+        }
+      }
+      return Object.entries(map)
+        .map(([food, { foodType, totalGrams, subs }]) => ({
+          food,
+          foodType,
+          totalGrams,
+          substitutions: Array.from(subs),
+        }))
+        .sort((a, b) => b.totalGrams - a.totalGrams);
+    }
+
     const map: Record<
       string,
       { foodType: string; totalGrams: number; subs: Set<string> }
@@ -91,7 +128,7 @@ export function CalculatorScreen() {
         substitutions: Array.from(subs),
       }))
       .sort((a, b) => b.totalGrams - a.totalGrams);
-  }, [visiblePlanDays]);
+  }, [remoteDayPlans, selectedSchedule, t, visiblePlanDays]);
 
   const goPrevMonth = useCallback(() => {
     if (!canGoPrev || selectedScheduleIndex < 1) return;

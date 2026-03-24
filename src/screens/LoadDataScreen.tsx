@@ -90,9 +90,12 @@ function parseMealMeta(notes?: string): MealDraftMeta {
 
 function mealFromDay(day: { meals?: Array<{ mealType: string; product: string; amountGrams: number }> } | undefined, type: "lunch" | "evening") {
   if (!day?.meals?.length) return { product: "", amount: "" };
-  const first = day.meals.find((m) => m.mealType === type);
-  if (!first) return { product: "", amount: "" };
-  return { product: first.product, amount: String(first.amountGrams) };
+  const items = day.meals.filter((m) => m.mealType === type);
+  if (!items.length) return { product: "", amount: "" };
+  return {
+    product: items.map((m) => m.product).filter(Boolean).join(", "),
+    amount: items.map((m) => String(m.amountGrams)).join(", "),
+  };
 }
 
 function buildMealMeta(meta: MealDraftMeta): string | undefined {
