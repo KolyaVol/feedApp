@@ -880,15 +880,19 @@ export function LoadDataScreen() {
             <View style={styles.rowsWrap}>
               {draftDaysSorted.map((d) => {
                 const amountText = amountTextById[d.id] ?? String(d.amountGrams);
-                const amountParsed = parseInt(amountText, 10);
-                const amountBad = !amountText.trim() || isNaN(amountParsed) || amountParsed < 0;
                 const isProgress = d.date === progressDayStr;
                 const remoteDay = d.scheduleId.startsWith("remote-")
                   ? remoteDayPlans.find((x) => x.date === d.date)
                   : undefined;
+                const morningRemote = remoteDay?.meals.find((m) => m.mealType === "morning");
                 const lunchExisting = mealFromDay(remoteDay, "lunch");
                 const eveningExisting = mealFromDay(remoteDay, "evening");
                 const parsedMeta = parseMealMeta(d.notes);
+                const morningFoodValue = morningRemote?.product ?? d.food;
+                const morningAmountValue = morningRemote?.amountGrams ?? d.amountGrams;
+                const morningAmountText = morningRemote ? String(morningAmountValue) : amountText;
+                const morningAmountParsed = parseInt(morningAmountText, 10);
+                const morningAmountBad = !morningAmountText.trim() || isNaN(morningAmountParsed) || morningAmountParsed < 0;
                 const mealMeta: MealDraftMeta = {
                   ...parsedMeta,
                   lunchFood: parsedMeta.lunchFood || lunchExisting.product,
@@ -896,7 +900,7 @@ export function LoadDataScreen() {
                   eveningFood: parsedMeta.eveningFood || eveningExisting.product,
                   eveningAmount: parsedMeta.eveningAmount || eveningExisting.amount,
                 };
-                const hasBreakfast = !!(d.food || amountText.trim());
+                const hasBreakfast = !!(morningFoodValue || morningAmountText.trim());
                 const hasLunch = !!(mealMeta.lunchFood || mealMeta.lunchAmount);
                 const hasEvening = !!(mealMeta.eveningFood || mealMeta.eveningAmount);
                 return (
@@ -945,7 +949,7 @@ export function LoadDataScreen() {
                         </Text>
                         <TextInput
                           style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
-                          value={d.food}
+                          value={morningFoodValue}
                           onChangeText={(v) => updateDay(d.id, { food: v })}
                           placeholder={t("loadDataColFood")}
                           placeholderTextColor={colors.placeholder}
@@ -955,9 +959,9 @@ export function LoadDataScreen() {
                             style={[
                               styles.fieldInput,
                               styles.amountInput,
-                              { borderColor: amountBad ? colors.danger : colors.borderLight, color: colors.text },
+                              { borderColor: morningAmountBad ? colors.danger : colors.borderLight, color: colors.text },
                             ]}
-                            value={amountText}
+                            value={morningAmountText}
                             onChangeText={(v) => setAmountTextById((prev) => ({ ...prev, [d.id]: v }))}
                             keyboardType="numeric"
                             placeholder={`${t("loadDataColAmount")} (${t("loadDataGrams")})`}

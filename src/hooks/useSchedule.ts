@@ -28,7 +28,9 @@ import {
   addShiftOperation,
   getUserOverlay,
   removeShiftOperation,
+  setEatenProduct,
   setReplacementMeal,
+  setReplacementMealsBulk,
   toggleMealEaten,
 } from "../data/userOverlay";
 
@@ -367,6 +369,19 @@ export function useSchedule() {
     return userOverlay?.eatenMealsByDate ?? {};
   }, [userOverlay]);
 
+  const eatenProducts = useMemo(() => {
+    return userOverlay?.eatenProducts ?? {};
+  }, [userOverlay]);
+
+  const isProductEaten = useCallback(
+    (product: string) => {
+      const key = product.trim().toLowerCase();
+      if (!key) return false;
+      return !!eatenProducts[key];
+    },
+    [eatenProducts],
+  );
+
   const dayEatenByDate = useMemo(() => {
     const out: Record<string, boolean> = {};
     for (const d of remoteDayPlans) {
@@ -600,10 +615,18 @@ export function useSchedule() {
 
   const toggleMealEatenForDate = useCallback(
     async (date: string, mealType: MealType): Promise<void> => {
-      await toggleMealEaten(date, mealType);
+      const nextOverlay = await toggleMealEaten(date, mealType);
+      const isNowEaten = !!nextOverlay.eatenMealsByDate[date]?.[mealType];
+      if (isNowEaten) {
+        const day = remoteDayPlans.find((d) => d.date === date);
+        const meal = day?.meals.find((m) => m.mealType === mealType);
+        if (meal && meal.amountGrams >= 30) {
+          await setEatenProduct(meal.product);
+        }
+      }
       await refresh();
     },
-    [refresh],
+    [refresh, remoteDayPlans],
   );
 
   const isMealEaten = useCallback(
@@ -636,6 +659,14 @@ export function useSchedule() {
     [refresh],
   );
 
+  const replaceMealsBulk = useCallback(
+    async (items: Array<{ date: string; mealType: MealType; product: string; amountGrams: number }>): Promise<void> => {
+      await setReplacementMealsBulk(items);
+      await refresh();
+    },
+    [refresh],
+  );
+
   return {
     planDays: effectivePlanDays,
     schedules: effectiveSchedules,
@@ -660,10 +691,12 @@ export function useSchedule() {
     shiftProductTimeline,
     toggleMealEatenForDate,
     isMealEaten,
+    isProductEaten,
     shiftedMealsByDate,
     dayEatenByDate,
     displacedByDate,
     revertShiftAtSlot,
     replaceShiftedMealAtSlot,
+    replaceMealsBulk,
   };
 }

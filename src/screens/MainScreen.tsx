@@ -37,6 +37,7 @@ export function MainScreen() {
     remoteToday,
     allowedProductsForCurrentDay,
     remoteDayPlans,
+    planDays,
     getScheduleForDay,
     progressDateStr,
     updateAllPlanDaysTime,
@@ -44,11 +45,13 @@ export function MainScreen() {
     shiftProductTimeline,
     toggleMealEatenForDate,
     isMealEaten,
+    isProductEaten,
     dayEatenByDate,
     shiftedMealsByDate,
     displacedByDate,
     revertShiftAtSlot,
     replaceShiftedMealAtSlot,
+    replaceMealsBulk,
   } = useSchedule();
 
   const tipPickedRef = useRef(false);
@@ -67,6 +70,28 @@ export function MainScreen() {
   const [replaceProduct, setReplaceProduct] = React.useState("");
   const [replaceAmountText, setReplaceAmountText] = React.useState("0");
   const [replacing, setReplacing] = React.useState(false);
+  const [replaceInStreak, setReplaceInStreak] = React.useState(false);
+
+  const allSeenProducts = useMemo(() => {
+    const seen = new Map<string, string>();
+    const add = (p: string) => {
+      const key = p.trim().toLowerCase();
+      if (!key) return;
+      if (!seen.has(key)) seen.set(key, p.trim());
+    };
+    for (const d of remoteDayPlans) for (const m of d.meals) add(m.product);
+    for (const d of planDays) add(d.food);
+    return [...seen.entries()]
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => {
+        const ea = !!isProductEaten(a.key);
+        const eb = !!isProductEaten(b.key);
+        if (ea !== eb) return ea ? -1 : 1;
+        return a.label.localeCompare(b.label, locale, { sensitivity: "base" });
+      });
+  }, [isProductEaten, locale, planDays, remoteDayPlans]);
+
+  const replaceProductIsEaten = useMemo(() => isProductEaten(replaceProduct), [isProductEaten, replaceProduct]);
 
   useFocusEffect(
     useCallback(() => {
@@ -162,20 +187,57 @@ export function MainScreen() {
 
   const openReplaceModal = useCallback((mealType: "morning" | "lunch" | "evening") => {
     const displaced = displacedByDate[progressDateStr]?.[mealType]?.meal;
+    const currentDay = remoteDayPlans.find((d) => d.date === progressDateStr);
+    const currentMeal = currentDay?.meals.find((m) => m.mealType === mealType);
     setReplaceMealType(mealType);
-    setReplaceProduct(displaced?.product ?? "");
-    setReplaceAmountText(String(displaced?.amountGrams ?? 0));
+    setReplaceProduct(displaced?.product ?? currentMeal?.product ?? "");
+    setReplaceAmountText(String(displaced?.amountGrams ?? currentMeal?.amountGrams ?? 0));
+    setReplaceInStreak(false);
     setReplaceModalVisible(true);
-  }, [displacedByDate, progressDateStr]);
+  }, [displacedByDate, progressDateStr, remoteDayPlans]);
 
   const saveReplacement = useCallback(async () => {
     const amount = parseInt(replaceAmountText.trim(), 10);
     if (!replaceProduct.trim() || !Number.isFinite(amount) || amount < 0) return;
     setReplacing(true);
-    await replaceShiftedMealAtSlot(progressDateStr, replaceMealType, replaceProduct, amount);
+    if (replaceInStreak && !replaceProductIsEaten) {
+      const day = remoteDayPlans.find((d) => d.date === progressDateStr);
+      const meal = day?.meals.find((m) => m.mealType === replaceMealType);
+      const originalProduct = meal?.product?.trim();
+      if (originalProduct) {
+        const items: Array<{ date: string; mealType: typeof replaceMealType; product: string; amountGrams: number }> = [];
+        for (const d of remoteDayPlans) {
+          if (d.date < progressDateStr) continue;
+          const m = d.meals.find((x) => x.mealType === replaceMealType);
+          if (!m) continue;
+          if (m.product.trim() !== originalProduct) continue;
+          items.push({ date: d.date, mealType: replaceMealType, product: replaceProduct, amountGrams: m.amountGrams });
+        }
+        if (items.length) {
+          items[0] = { ...items[0], amountGrams: amount };
+          await replaceMealsBulk(items);
+        } else {
+          await replaceShiftedMealAtSlot(progressDateStr, replaceMealType, replaceProduct, amount);
+        }
+      } else {
+        await replaceShiftedMealAtSlot(progressDateStr, replaceMealType, replaceProduct, amount);
+      }
+    } else {
+      await replaceShiftedMealAtSlot(progressDateStr, replaceMealType, replaceProduct, amount);
+    }
     setReplacing(false);
     setReplaceModalVisible(false);
-  }, [progressDateStr, replaceAmountText, replaceMealType, replaceProduct, replaceShiftedMealAtSlot]);
+  }, [
+    progressDateStr,
+    replaceAmountText,
+    replaceInStreak,
+    replaceMealType,
+    replaceMealsBulk,
+    replaceProduct,
+    replaceProductIsEaten,
+    replaceShiftedMealAtSlot,
+    remoteDayPlans,
+  ]);
 
   const todayStr = useMemo(() => {
     const now = new Date(progressDateStr + "T00:00:00");
@@ -362,6 +424,12 @@ export function MainScreen() {
                     onPress={() => openShiftModal(meal.type, meal.items[0]?.product)}
                   >
                     <Text style={styles.actionBtnText}>{t("mainShiftModeMeal")}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionBtnEaten]}
+                    onPress={() => openReplaceModal(meal.type)}
+                  >
+                    <Text style={styles.actionBtnText}>{t("mainShiftReplace")}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[
@@ -568,14 +636,28 @@ export function MainScreen() {
           <View style={g.modal}>
             <Text style={g.modalTitle}>{t("mainShiftReplaceTitle")}</Text>
             <Text style={styles.inputLabel}>{t("mainShiftProductLabel")}</Text>
-            <TextInput
-              style={[g.input, { marginTop: 8, color: colors.text, backgroundColor: colors.card }]}
-              value={replaceProduct}
-              onChangeText={setReplaceProduct}
-              placeholder={t("mainShiftProductPlaceholder")}
-              placeholderTextColor={colors.textMuted}
-              selectionColor={colors.primary}
-            />
+            <ScrollView style={{ maxHeight: 220, marginTop: 10 }}>
+              <View style={styles.chipsRow}>
+                {allSeenProducts.map((p) => {
+                  const selected = p.label === replaceProduct;
+                  return (
+                    <TouchableOpacity
+                      key={p.key}
+                      onPress={() => {
+                        setReplaceProduct(p.label);
+                        if (isProductEaten(p.label)) setReplaceInStreak(false);
+                      }}
+                      style={[
+                        styles.chip,
+                        selected && { borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.chipBg },
+                      ]}
+                    >
+                      <Text style={[styles.chipText, selected && { color: colors.primary }]}>{p.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
             <Text style={[styles.inputLabel, { marginTop: 12 }]}>{t("mainShiftAmountLabel")}</Text>
             <TextInput
               style={[g.input, { marginTop: 8, color: colors.text, backgroundColor: colors.card }]}
@@ -586,6 +668,16 @@ export function MainScreen() {
               placeholderTextColor={colors.textMuted}
               selectionColor={colors.primary}
             />
+            {!replaceProductIsEaten && (
+              <TouchableOpacity
+                style={[styles.detailBadge, { marginTop: 12, alignSelf: "flex-start" }]}
+                onPress={() => setReplaceInStreak((v) => !v)}
+              >
+                <Text style={styles.detailBadgeText}>
+                  {replaceInStreak ? `${t("mainShiftReplace")} · streak` : "Replace in streak"}
+                </Text>
+              </TouchableOpacity>
+            )}
             <View style={[g.modalButtons, { marginTop: 12 }]}>
               <TouchableOpacity style={g.cancelBtn} onPress={() => setReplaceModalVisible(false)}>
                 <Text style={g.cancelBtnText}>{t("remindersCancel")}</Text>

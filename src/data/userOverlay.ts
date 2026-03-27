@@ -3,7 +3,11 @@ import type { MealType, ShiftOperation, UserOverlayState } from "../types";
 import { KEYS } from "./storageKeys";
 import { generateId } from "../utils/id";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
+
+function normalizeProductKey(product: string): string {
+  return product.trim().toLowerCase();
+}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -14,6 +18,7 @@ function emptyOverlay(): UserOverlayState {
     schemaVersion: SCHEMA_VERSION,
     shifts: [],
     eatenMealsByDate: {},
+    eatenProducts: {},
     replacementsByDate: {},
     updatedAt: nowIso(),
   };
@@ -44,10 +49,16 @@ function sanitize(raw: unknown): UserOverlayState {
     src.replacementsByDate && typeof src.replacementsByDate === "object"
       ? (src.replacementsByDate as UserOverlayState["replacementsByDate"])
       : {};
+  const eatenProductsRaw = src.eatenProducts && typeof src.eatenProducts === "object" ? (src.eatenProducts as any) : {};
+  const eatenProducts: Record<string, true> = {};
+  for (const [k, v] of Object.entries(eatenProductsRaw)) {
+    if (v === true && typeof k === "string" && k.trim()) eatenProducts[normalizeProductKey(k)] = true;
+  }
   return {
     schemaVersion: SCHEMA_VERSION,
     shifts,
     eatenMealsByDate,
+    eatenProducts,
     replacementsByDate,
     updatedAt: typeof src.updatedAt === "string" ? src.updatedAt : nowIso(),
   };
@@ -140,6 +151,50 @@ export async function setReplacementMeal(
     replacementsByDate: {
       ...state.replacementsByDate,
       [date]: nextDate,
+    },
+    updatedAt: nowIso(),
+  };
+  await setUserOverlay(next);
+  return next;
+}
+
+export async function setReplacementMealsBulk(
+  items: Array<{ date: string; mealType: MealType; product: string; amountGrams: number }>,
+): Promise<UserOverlayState> {
+  const state = await getUserOverlay();
+  if (!items.length) return state;
+
+  const nextReplacementsByDate = { ...state.replacementsByDate };
+  for (const it of items) {
+    const cleanProduct = it.product.trim();
+    const safeAmount = Number.isFinite(it.amountGrams) ? Math.max(0, Math.trunc(it.amountGrams)) : 0;
+    if (!cleanProduct) continue;
+    const prevDate = nextReplacementsByDate[it.date] ?? {};
+    nextReplacementsByDate[it.date] = {
+      ...prevDate,
+      [it.mealType]: { product: cleanProduct, amountGrams: safeAmount },
+    };
+  }
+
+  const next: UserOverlayState = {
+    ...state,
+    replacementsByDate: nextReplacementsByDate,
+    updatedAt: nowIso(),
+  };
+  await setUserOverlay(next);
+  return next;
+}
+
+export async function setEatenProduct(product: string): Promise<UserOverlayState> {
+  const state = await getUserOverlay();
+  const key = normalizeProductKey(product);
+  if (!key) return state;
+  if (state.eatenProducts?.[key]) return state;
+  const next: UserOverlayState = {
+    ...state,
+    eatenProducts: {
+      ...(state.eatenProducts ?? {}),
+      [key]: true,
     },
     updatedAt: nowIso(),
   };

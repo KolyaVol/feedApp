@@ -96,6 +96,7 @@ export interface UserOverlayState {
   schemaVersion: number;
   shifts: ShiftOperation[];
   eatenMealsByDate: EatenMealsByDate;
+  eatenProducts: Record<string, true>;
   replacementsByDate: Record<string, Partial<Record<MealType, { product: string; amountGrams: number }>>>;
   updatedAt: string;
 }
