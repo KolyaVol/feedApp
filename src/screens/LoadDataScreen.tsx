@@ -1229,6 +1229,7 @@ function useLocalStyles(colors: {
           flexDirection: "row",
           alignItems: "center",
           gap: 10,
+          marginTop: 8,
           width: "100%",
         },
         amountInput: {
