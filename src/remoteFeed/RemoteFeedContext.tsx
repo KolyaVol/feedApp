@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState, createContext, useCon
 import { fetchRemoteJson } from "./api";
 import { loadCachedJson, loadStartDate, saveCachedJson, setStartDate as saveStartDate } from "./storage";
 import { getTodayFromSchedule } from "./deriveToday";
-import { scheduleMealsFromFeedData } from "./notifications";
+import { cancelAllRemoteFeedNotifications, scheduleMealsFromFeedData } from "./notifications";
 import { isScheduleValid, shouldRejectFreshInFavorOfCache } from "./validate";
 import { REMOTE_FEED_URL } from "./config";
 import type { RemoteFeedSchedule, RemoteFeedToday } from "./types";
@@ -39,6 +39,7 @@ export function RemoteFeedProvider({ children }: { children: React.ReactNode }) 
 
   const fetchAndUpdate = useCallback(async () => {
     const COOLDOWN_MS = 30_000;
+    await cancelAllRemoteFeedNotifications();
     if (Date.now() - appliedAtRef.current < COOLDOWN_MS) return;
     const sd = startDateRef.current;
     const cachedSchedule = scheduleRef.current;

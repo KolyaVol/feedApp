@@ -1,25 +1,7 @@
 import * as Notifications from "expo-notifications";
 import type { RemoteFeedSchedule } from "./types";
-import { getTodayFromSchedule } from "./deriveToday";
-import { requestPermissions } from "../notifications/schedule";
 
 const REMOTE_FEED_TAG = "remote-feed-meal";
-
-function parseTime(time: string): { hour: number; minute: number } | null {
-  const m = /^(\d{1,2}):(\d{2})/.exec(time.trim());
-  if (!m) return null;
-  const hour = Number(m[1]);
-  const minute = Number(m[2]);
-  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
-  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
-  return { hour, minute };
-}
-
-function formatMealType(type: "morning" | "lunch" | "evening"): string {
-  if (type === "morning") return "Morning meal";
-  if (type === "lunch") return "Lunch meal";
-  return "Evening meal";
-}
 
 export async function cancelAllRemoteFeedNotifications(): Promise<void> {
   try {
@@ -35,38 +17,11 @@ export async function cancelAllRemoteFeedNotifications(): Promise<void> {
 }
 
 export async function scheduleMealsFromFeedData(
-  schedule: RemoteFeedSchedule,
-  startDate: string,
+  _schedule: RemoteFeedSchedule,
+  _startDate: string,
 ): Promise<void> {
   try {
-    const granted = await requestPermissions();
-    if (!granted) return;
-
-    const today = getTodayFromSchedule(schedule, startDate);
-    if (!today) return;
-
     await cancelAllRemoteFeedNotifications();
-
-    for (const meal of today.meals) {
-      if (!meal.time) continue;
-      const parsedTime = parseTime(meal.time);
-      if (!parsedTime) continue;
-      const foods = meal.items
-        .map((x) => `${x.product} ${x.amount_grams}g`)
-        .join(", ");
-      const advice = today.advice?.[0];
-      const bodyBase = meal.notes ? `${foods} — ${meal.notes}` : foods;
-      const body = advice ? `${bodyBase}\n💡 ${advice}` : bodyBase;
-
-      await Notifications.scheduleNotificationAsync({
-        content: { title: formatMealType(meal.type), body, data: { tag: REMOTE_FEED_TAG } },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DAILY,
-          hour: parsedTime.hour,
-          minute: parsedTime.minute,
-        },
-      });
-    }
   } catch {
     // ignore
   }
