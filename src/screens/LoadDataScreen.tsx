@@ -8,10 +8,12 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { BlurView } from "expo-blur";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { triggerGlobalScheduleRefresh, useSchedule } from "../hooks/useSchedule";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
@@ -490,6 +492,9 @@ export function LoadDataScreen() {
   const [githubSending, setGithubSending] = useState(false);
   const [githubResultText, setGithubResultText] = useState<string>("");
   const [toast, setToast] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const [startDateModalVisible, setStartDateModalVisible] = useState(false);
+  const [startDatePickerVisible, setStartDatePickerVisible] = useState(false);
+  const [startDateDraft, setStartDateDraft] = useState(() => new Date());
 
   const progressDayStr = progressDateStr;
   const isDarkUi = colors.background === "#1a1a1a";
@@ -770,6 +775,21 @@ export function LoadDataScreen() {
   }, [draftById, selectedScheduleId, todayPlan]);
 
   const selectedStartDate = selectedSchedule?.startDate ?? null;
+  const feedingStartDate = remote?.startDate ?? null;
+
+  const openStartDateModal = useCallback(() => {
+    const base = feedingStartDate ? new Date(feedingStartDate + "T00:00:00") : new Date();
+    setStartDateDraft(base);
+    setStartDatePickerVisible(Platform.OS === "ios");
+    setStartDateModalVisible(true);
+  }, [feedingStartDate]);
+
+  const saveStartDate = useCallback(async () => {
+    if (!remote?.setStartDate) return;
+    await remote.setStartDate(formatDateStr(startDateDraft));
+    setStartDatePickerVisible(false);
+    setStartDateModalVisible(false);
+  }, [remote, startDateDraft]);
 
   const scheduleForDate = useCallback(
     (dateStr: string) =>
@@ -867,6 +887,17 @@ export function LoadDataScreen() {
                   <TouchableOpacity style={styles.progressReset} onPress={scrollToCurrentDayRow}>
                     <Text style={[styles.progressResetText, { color: colors.primary }]}>{t("loadDataCurrentDay")}</Text>
                   </TouchableOpacity>
+                  <View style={[styles.startDateRow, { borderColor: colors.borderLight }]}>
+                    <Text style={[styles.startDateText, { color: colors.textMuted }]}>
+                      {t("loadDataFeedingStartDate")}: {feedingStartDate ? formatDateDisplay(feedingStartDate, locale) : "—"}
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.setCurrentBtn, { borderColor: colors.borderLight, backgroundColor: colors.card }]}
+                      onPress={openStartDateModal}
+                    >
+                      <Text style={[styles.setCurrentBtnText, { color: colors.primary }]}>{t("loadDataSetFeedingStartDate")}</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             ) : null}
@@ -1208,6 +1239,46 @@ export function LoadDataScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={startDateModalVisible} animationType="slide" transparent>
+        <View style={g.modalOverlay}>
+          <View style={g.modal}>
+            <Text style={g.modalTitle}>{t("loadDataSetFeedingStartDate")}</Text>
+            <TouchableOpacity
+              style={[styles.timeRowBtn, { borderColor: colors.borderLight }]}
+              onPress={() => setStartDatePickerVisible(true)}
+            >
+              <Text style={[styles.timeRowLabel, { color: colors.textMuted }]}>{t("loadDataFeedingStartDate")}</Text>
+              <Text style={[styles.timeRowValue, { color: colors.text }]}>{formatDateDisplay(formatDateStr(startDateDraft), locale)}</Text>
+            </TouchableOpacity>
+            {startDatePickerVisible ? (
+              <DateTimePicker
+                value={startDateDraft}
+                mode="date"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                onChange={(_, date) => {
+                  if (date) setStartDateDraft(date);
+                  setStartDatePickerVisible(Platform.OS === "ios");
+                }}
+              />
+            ) : null}
+            <View style={g.modalButtons}>
+              <TouchableOpacity
+                style={g.cancelBtn}
+                onPress={() => {
+                  setStartDatePickerVisible(false);
+                  setStartDateModalVisible(false);
+                }}
+              >
+                <Text style={g.cancelBtnText}>{t("loadDataCancel")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={g.saveBtn} onPress={saveStartDate}>
+                <Text style={g.saveBtnText}>{t("loadDataSave")}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1320,6 +1391,36 @@ function useLocalStyles(colors: {
         progressResetText: {
           fontSize: 18,
           fontFamily: fonts.medium,
+        },
+        startDateRow: {
+          borderTopWidth: 1,
+          paddingTop: 10,
+          marginTop: 4,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+        },
+        startDateText: {
+          fontSize: 14,
+          fontFamily: fonts.regular,
+          flex: 1,
+        },
+        timeRowBtn: {
+          borderWidth: 1,
+          borderRadius: spacing.radiusMd,
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          marginBottom: 16,
+        },
+        timeRowLabel: {
+          fontSize: 12,
+          fontFamily: fonts.medium,
+          marginBottom: 3,
+        },
+        timeRowValue: {
+          fontSize: 16,
+          fontFamily: fonts.regular,
         },
         dayCard: {
           borderWidth: 1,

@@ -129,6 +129,8 @@ export const en = {
   loadDataPrev: "Prev",
   loadDataNext: "Next",
   loadDataResetProgress: "Reset",
+  loadDataFeedingStartDate: "Feeding start date",
+  loadDataSetFeedingStartDate: "Set start date",
   loadDataUpdateDataAlert: "Update data — few days left in schedule",
   loadDataLastDayAlert: "This is the last day of the schedule.",
   loadDataSendSuccess: "Data sent successfully.",

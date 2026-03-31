@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, createContext, useContext } from "react";
 import { fetchRemoteJson } from "./api";
-import { loadCachedJson, loadStartDate, saveCachedJson } from "./storage";
+import { loadCachedJson, loadStartDate, saveCachedJson, setStartDate as saveStartDate } from "./storage";
 import { getTodayFromSchedule } from "./deriveToday";
 import { scheduleMealsFromFeedData } from "./notifications";
 import { isScheduleValid, shouldRejectFreshInFavorOfCache } from "./validate";
@@ -15,13 +15,14 @@ export interface RemoteFeedState {
   error: string | null;
   refresh: () => Promise<void>;
   applySchedule: (next: RemoteFeedSchedule) => Promise<void>;
+  setStartDate: (dateStr: string) => Promise<void>;
 }
 
 const RemoteFeedContext = createContext<RemoteFeedState | null>(null);
 
 export function RemoteFeedProvider({ children }: { children: React.ReactNode }) {
   const [schedule, setSchedule] = useState<RemoteFeedSchedule | null>(null);
-  const [startDate, setStartDate] = useState<string | null>(null);
+  const [startDate, setStartDateState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,7 +72,7 @@ export function RemoteFeedProvider({ children }: { children: React.ReactNode }) 
         scheduleRef.current = cached;
         startDateRef.current = sd;
         setSchedule(cached);
-        setStartDate(sd);
+        setStartDateState(sd);
         setLoading(false);
         await fetchAndUpdate();
       } catch {
@@ -104,9 +105,19 @@ export function RemoteFeedProvider({ children }: { children: React.ReactNode }) 
     }
   }, []);
 
+  const setStartDate = useCallback(async (dateStr: string) => {
+    await saveStartDate(dateStr);
+    startDateRef.current = dateStr;
+    setStartDateState(dateStr);
+    const currentSchedule = scheduleRef.current;
+    if (currentSchedule) {
+      await scheduleMealsFromFeedData(currentSchedule, dateStr);
+    }
+  }, []);
+
   const value = useMemo<RemoteFeedState>(
-    () => ({ schedule, startDate, today, loading, error, refresh, applySchedule }),
-    [schedule, startDate, today, loading, error, refresh, applySchedule],
+    () => ({ schedule, startDate, today, loading, error, refresh, applySchedule, setStartDate }),
+    [schedule, startDate, today, loading, error, refresh, applySchedule, setStartDate],
   );
 
   return (

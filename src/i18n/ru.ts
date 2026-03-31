@@ -131,6 +131,8 @@ export const ru: Record<TranslationKey, string> = {
   loadDataPrev: "Назад",
   loadDataNext: "Вперёд",
   loadDataResetProgress: "Сброс",
+  loadDataFeedingStartDate: "Дата начала прикорма",
+  loadDataSetFeedingStartDate: "Задать дату начала",
   loadDataUpdateDataAlert: "Обновите данные — до конца расписания осталось мало дней",
   loadDataLastDayAlert: "Это последний день расписания.",
   loadDataSendSuccess: "Данные успешно отправлены.",
