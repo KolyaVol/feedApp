@@ -148,10 +148,6 @@ export default function App() {
       try {
         await NavigationBar.setVisibilityAsync("hidden");
       } catch {}
-
-      try {
-        await NavigationBar.setBehaviorAsync("overlay-swipe");
-      } catch {}
     };
 
     void applyAndroidNavBarMode();
