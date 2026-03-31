@@ -9,6 +9,12 @@ function normalizeProductKey(product: string): string {
   return product.trim().toLowerCase();
 }
 
+function buildMealEatenKey(mealType: MealType, product?: string): string {
+  const normalized = normalizeProductKey(product ?? "");
+  if (!normalized) return mealType;
+  return `${mealType}::${normalized}`;
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -102,13 +108,19 @@ export async function addShiftOperation(
 export async function toggleMealEaten(
   date: string,
   mealType: MealType,
+  product?: string,
 ): Promise<UserOverlayState> {
   const state = await getUserOverlay();
-  const current = !!state.eatenMealsByDate[date]?.[mealType];
+  const key = buildMealEatenKey(mealType, product);
+  const currentDateState = state.eatenMealsByDate[date] ?? {};
+  const current = !!currentDateState[key];
   const nextDate = {
-    ...(state.eatenMealsByDate[date] ?? {}),
-    [mealType]: !current,
+    ...currentDateState,
+    [key]: !current,
   };
+  if (key !== mealType) {
+    delete nextDate[mealType];
+  }
   const next: UserOverlayState = {
     ...state,
     eatenMealsByDate: {

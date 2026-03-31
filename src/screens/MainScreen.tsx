@@ -367,7 +367,7 @@ export function MainScreen() {
               meal.skeleton && { backgroundColor: colors.pastelOrange, borderWidth: 1, borderColor: colors.border },
               dayEatenByDate[progressDateStr]
                 ? { backgroundColor: colors.pastelGreen }
-                : isMealEaten(progressDateStr, meal.type)
+                : isMealEaten(progressDateStr, meal.type, meal.items[0]?.product)
                   ? { backgroundColor: colors.pastelYellow }
                   : undefined,
             ]}
@@ -395,7 +395,7 @@ export function MainScreen() {
                   <Text style={styles.detailBadgeText}>{t("mainShifted")}</Text>
                 </View>
               ) : null}
-              {isMealEaten(progressDateStr, meal.type) ? (
+              {isMealEaten(progressDateStr, meal.type, meal.items[0]?.product) ? (
                 <View style={styles.detailBadge}>
                   <Text style={styles.detailBadgeText}>{t("mainEaten")}</Text>
                 </View>
@@ -435,12 +435,12 @@ export function MainScreen() {
                     style={[
                       styles.actionBtn,
                       styles.actionBtnEaten,
-                      isMealEaten(progressDateStr, meal.type) && { backgroundColor: colors.pastelGreen },
+                      isMealEaten(progressDateStr, meal.type, meal.items[0]?.product) && { backgroundColor: colors.pastelGreen },
                     ]}
-                    onPress={() => toggleMealEatenForDate(progressDateStr, meal.type)}
+                    onPress={() => toggleMealEatenForDate(progressDateStr, meal.type, meal.items[0]?.product)}
                   >
                     <Text style={styles.actionBtnText}>
-                      {isMealEaten(progressDateStr, meal.type) ? t("mainUnsetEaten") : t("mainSetEaten")}
+                      {isMealEaten(progressDateStr, meal.type, meal.items[0]?.product) ? t("mainUnsetEaten") : t("mainSetEaten")}
                     </Text>
                   </TouchableOpacity>
                 </>

@@ -98,6 +98,31 @@ function mealFromDay(day: { meals?: Array<{ mealType: string; product: string; a
   };
 }
 
+function splitCsv(value: string): string[] {
+  return value
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function mealRows(foodCsv: string, amountCsv: string): Array<{ food: string; amount: string }> {
+  const foods = splitCsv(foodCsv);
+  const amounts = splitCsv(amountCsv);
+  const len = Math.max(foods.length, amounts.length, 1);
+  return Array.from({ length: len }, (_, i) => ({
+    food: foods[i] ?? "",
+    amount: amounts[i] ?? "",
+  }));
+}
+
+function joinMealRows(rows: Array<{ food: string; amount: string }>): { food: string; amount: string } {
+  const filtered = rows.filter((r) => r.food.trim() || r.amount.trim());
+  return {
+    food: filtered.map((r) => r.food.trim()).filter(Boolean).join(", "),
+    amount: filtered.map((r) => r.amount.trim()).filter(Boolean).join(", "),
+  };
+}
+
 function buildMealMeta(meta: MealDraftMeta): string | undefined {
   const lines: string[] = [];
   if (meta.lunchFood || meta.lunchAmount) lines.push(`__lunch=${meta.lunchFood}|${meta.lunchAmount}`);
@@ -903,6 +928,8 @@ export function LoadDataScreen() {
                 const hasBreakfast = !!(morningFoodValue || morningAmountText.trim());
                 const hasLunch = !!(mealMeta.lunchFood || mealMeta.lunchAmount);
                 const hasEvening = !!(mealMeta.eveningFood || mealMeta.eveningAmount);
+                const lunchRows = mealRows(mealMeta.lunchFood, mealMeta.lunchAmount);
+                const eveningRows = mealRows(mealMeta.eveningFood, mealMeta.eveningAmount);
                 return (
                   <View
                     key={d.id}
@@ -943,98 +970,137 @@ export function LoadDataScreen() {
 
                     <View style={styles.fieldsWrap}>
                       {hasBreakfast ? (
-                      <View style={[styles.field, styles.fieldFull]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
-                          {t("mealBreakfast")}{isMealEaten(d.date, "morning") ? ` · ${t("loadDataMealEatenSuffix")}` : ""}
-                        </Text>
-                        <TextInput
-                          style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
-                          value={morningFoodValue}
-                          onChangeText={(v) => updateDay(d.id, { food: v })}
-                          placeholder={t("loadDataColFood")}
-                          placeholderTextColor={colors.placeholder}
-                        />
-                        <View style={styles.amountRow}>
+                        <View style={[styles.field, styles.fieldFull, styles.mealSection, { borderColor: colors.borderLight }]}>
+                          <Text style={[styles.fieldLabel, styles.mealSectionTitle, { color: colors.textMuted }]}>
+                            {t("mealBreakfast")}
+                            {isMealEaten(d.date, "morning", morningFoodValue) ? ` · ${t("loadDataMealEatenSuffix")}` : ""}
+                          </Text>
                           <TextInput
                             style={[
                               styles.fieldInput,
-                              styles.amountInput,
-                              { borderColor: morningAmountBad ? colors.danger : colors.borderLight, color: colors.text },
+                              styles.fieldMultiline,
+                              { borderColor: colors.borderLight, color: colors.text },
                             ]}
-                            value={morningAmountText}
-                            onChangeText={(v) => setAmountTextById((prev) => ({ ...prev, [d.id]: v }))}
-                            keyboardType="numeric"
-                            placeholder={`${t("loadDataColAmount")} (${t("loadDataGrams")})`}
+                            value={morningFoodValue}
+                            onChangeText={(v) => updateDay(d.id, { food: v })}
+                            multiline
+                            textAlignVertical="top"
+                            placeholder={t("loadDataColFood")}
                             placeholderTextColor={colors.placeholder}
                           />
+                          <View style={styles.amountRow}>
+                            <TextInput
+                              style={[
+                                styles.fieldInput,
+                                styles.amountInput,
+                                { borderColor: morningAmountBad ? colors.danger : colors.borderLight, color: colors.text },
+                              ]}
+                              value={morningAmountText}
+                              onChangeText={(v) => setAmountTextById((prev) => ({ ...prev, [d.id]: v }))}
+                              keyboardType="numeric"
+                              placeholder={`${t("loadDataColAmount")} (${t("loadDataGrams")})`}
+                              placeholderTextColor={colors.placeholder}
+                            />
+                          </View>
                         </View>
-                      </View>
                       ) : null}
 
                       {hasLunch ? (
-                      <View style={[styles.field, styles.fieldFull]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
-                          {t("mealLunch")}{isMealEaten(d.date, "lunch") ? ` · ${t("loadDataMealEatenSuffix")}` : ""}
-                        </Text>
-                        <TextInput
-                          style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
-                          value={mealMeta.lunchFood}
-                          onChangeText={(v) =>
-                            updateDay(d.id, {
-                              notes: buildMealMeta({ ...mealMeta, lunchFood: v }),
-                            })
-                          }
-                          placeholder={t("loadDataColFood")}
-                          placeholderTextColor={colors.placeholder}
-                        />
-                        <View style={styles.amountRow}>
-                          <TextInput
-                            style={[styles.fieldInput, styles.amountInput, { borderColor: colors.borderLight, color: colors.text }]}
-                            value={mealMeta.lunchAmount}
-                            onChangeText={(v) =>
-                              updateDay(d.id, {
-                                notes: buildMealMeta({ ...mealMeta, lunchAmount: v }),
-                              })
-                            }
-                            keyboardType="numeric"
-                            placeholder={`${t("loadDataColAmount")} (${t("loadDataGrams")})`}
-                            placeholderTextColor={colors.placeholder}
-                          />
+                        <View style={[styles.field, styles.fieldFull, styles.mealSection, { borderColor: colors.borderLight }]}>
+                          <Text style={[styles.fieldLabel, styles.mealSectionTitle, { color: colors.textMuted }]}>
+                            {t("mealLunch")}
+                            {isMealEaten(d.date, "lunch", mealMeta.lunchFood) ? ` · ${t("loadDataMealEatenSuffix")}` : ""}
+                          </Text>
+                          {lunchRows.map((row, idx) => (
+                            <View key={`lunch-${d.id}-${idx}`} style={styles.mealRow}>
+                              <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{`${t("loadDataColFood")} ${idx + 1}`}</Text>
+                              <TextInput
+                                style={[
+                                  styles.fieldInput,
+                                  styles.fieldMultiline,
+                                  { borderColor: colors.borderLight, color: colors.text },
+                                ]}
+                                value={row.food}
+                                onChangeText={(v) => {
+                                  const next = lunchRows.map((x, i) => (i === idx ? { ...x, food: v } : x));
+                                  const merged = joinMealRows(next);
+                                  updateDay(d.id, {
+                                    notes: buildMealMeta({ ...mealMeta, lunchFood: merged.food, lunchAmount: merged.amount }),
+                                  });
+                                }}
+                                multiline
+                                textAlignVertical="top"
+                                placeholder={t("loadDataColFood")}
+                                placeholderTextColor={colors.placeholder}
+                              />
+                              <View style={styles.amountRow}>
+                                <TextInput
+                                  style={[styles.fieldInput, styles.amountInput, { borderColor: colors.borderLight, color: colors.text }]}
+                                  value={row.amount}
+                                  onChangeText={(v) => {
+                                    const next = lunchRows.map((x, i) => (i === idx ? { ...x, amount: v } : x));
+                                    const merged = joinMealRows(next);
+                                    updateDay(d.id, {
+                                      notes: buildMealMeta({ ...mealMeta, lunchFood: merged.food, lunchAmount: merged.amount }),
+                                    });
+                                  }}
+                                  keyboardType="numeric"
+                                  placeholder={`${t("loadDataColAmount")} (${t("loadDataGrams")})`}
+                                  placeholderTextColor={colors.placeholder}
+                                />
+                              </View>
+                            </View>
+                          ))}
                         </View>
-                      </View>
                       ) : null}
 
                       {hasEvening ? (
-                      <View style={[styles.field, styles.fieldFull]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
-                          {t("mealEvening")}{isMealEaten(d.date, "evening") ? ` · ${t("loadDataMealEatenSuffix")}` : ""}
-                        </Text>
-                        <TextInput
-                          style={[styles.fieldInput, { borderColor: colors.borderLight, color: colors.text }]}
-                          value={mealMeta.eveningFood}
-                          onChangeText={(v) =>
-                            updateDay(d.id, {
-                              notes: buildMealMeta({ ...mealMeta, eveningFood: v }),
-                            })
-                          }
-                          placeholder={t("loadDataColFood")}
-                          placeholderTextColor={colors.placeholder}
-                        />
-                        <View style={styles.amountRow}>
-                          <TextInput
-                            style={[styles.fieldInput, styles.amountInput, { borderColor: colors.borderLight, color: colors.text }]}
-                            value={mealMeta.eveningAmount}
-                            onChangeText={(v) =>
-                              updateDay(d.id, {
-                                notes: buildMealMeta({ ...mealMeta, eveningAmount: v }),
-                              })
-                            }
-                            keyboardType="numeric"
-                            placeholder={`${t("loadDataColAmount")} (${t("loadDataGrams")})`}
-                            placeholderTextColor={colors.placeholder}
-                          />
+                        <View style={[styles.field, styles.fieldFull, styles.mealSection, { borderColor: colors.borderLight }]}>
+                          <Text style={[styles.fieldLabel, styles.mealSectionTitle, { color: colors.textMuted }]}>
+                            {t("mealEvening")}
+                            {isMealEaten(d.date, "evening", mealMeta.eveningFood) ? ` · ${t("loadDataMealEatenSuffix")}` : ""}
+                          </Text>
+                          {eveningRows.map((row, idx) => (
+                            <View key={`evening-${d.id}-${idx}`} style={styles.mealRow}>
+                              <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{`${t("loadDataColFood")} ${idx + 1}`}</Text>
+                              <TextInput
+                                style={[
+                                  styles.fieldInput,
+                                  styles.fieldMultiline,
+                                  { borderColor: colors.borderLight, color: colors.text },
+                                ]}
+                                value={row.food}
+                                onChangeText={(v) => {
+                                  const next = eveningRows.map((x, i) => (i === idx ? { ...x, food: v } : x));
+                                  const merged = joinMealRows(next);
+                                  updateDay(d.id, {
+                                    notes: buildMealMeta({ ...mealMeta, eveningFood: merged.food, eveningAmount: merged.amount }),
+                                  });
+                                }}
+                                multiline
+                                textAlignVertical="top"
+                                placeholder={t("loadDataColFood")}
+                                placeholderTextColor={colors.placeholder}
+                              />
+                              <View style={styles.amountRow}>
+                                <TextInput
+                                  style={[styles.fieldInput, styles.amountInput, { borderColor: colors.borderLight, color: colors.text }]}
+                                  value={row.amount}
+                                  onChangeText={(v) => {
+                                    const next = eveningRows.map((x, i) => (i === idx ? { ...x, amount: v } : x));
+                                    const merged = joinMealRows(next);
+                                    updateDay(d.id, {
+                                      notes: buildMealMeta({ ...mealMeta, eveningFood: merged.food, eveningAmount: merged.amount }),
+                                    });
+                                  }}
+                                  keyboardType="numeric"
+                                  placeholder={`${t("loadDataColAmount")} (${t("loadDataGrams")})`}
+                                  placeholderTextColor={colors.placeholder}
+                                />
+                              </View>
+                            </View>
+                          ))}
                         </View>
-                      </View>
                       ) : null}
 
                     </View>
@@ -1301,6 +1367,18 @@ function useLocalStyles(colors: {
         },
         fieldFull: {
           flexBasis: "100%",
+        },
+        mealSection: {
+          borderWidth: 1,
+          borderRadius: spacing.radiusMd,
+          padding: 10,
+        },
+        mealSectionTitle: {
+          fontSize: 13,
+          paddingBottom: 8,
+        },
+        mealRow: {
+          paddingBottom: 8,
         },
         fieldLabel: {
           fontSize: 12,

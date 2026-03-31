@@ -83,6 +83,24 @@ interface ScheduleJson {
 type MealType = "morning" | "lunch" | "evening";
 type DayMeal = { mealType: MealType; product: string; amountGrams: number };
 
+function normalizeEatenProductKey(product?: string): string {
+  return (product ?? "").trim().toLowerCase();
+}
+
+function getMealEatenState(
+  dateState: Record<string, boolean> | undefined,
+  mealType: MealType,
+  product?: string,
+): boolean {
+  if (!dateState) return false;
+  const productKey = normalizeEatenProductKey(product);
+  if (productKey) {
+    const compositeKey = `${mealType}::${productKey}`;
+    if (compositeKey in dateState) return !!dateState[compositeKey];
+  }
+  return !!dateState[mealType];
+}
+
 function applyShiftOperations(
   days: DayPlan[],
   shifts: Array<{
@@ -390,7 +408,7 @@ export function useSchedule() {
         continue;
       }
       const state = eatenMealsByDate[d.date] ?? {};
-      out[d.date] = d.meals.every((m) => !!state[m.mealType]);
+      out[d.date] = d.meals.every((m) => getMealEatenState(state, m.mealType, m.product));
     }
     return out;
   }, [eatenMealsByDate, remoteDayPlans]);
@@ -614,12 +632,15 @@ export function useSchedule() {
   );
 
   const toggleMealEatenForDate = useCallback(
-    async (date: string, mealType: MealType): Promise<void> => {
-      const nextOverlay = await toggleMealEaten(date, mealType);
-      const isNowEaten = !!nextOverlay.eatenMealsByDate[date]?.[mealType];
+    async (date: string, mealType: MealType, product?: string): Promise<void> => {
+      const nextOverlay = await toggleMealEaten(date, mealType, product);
+      const isNowEaten = getMealEatenState(nextOverlay.eatenMealsByDate[date], mealType, product);
       if (isNowEaten) {
         const day = remoteDayPlans.find((d) => d.date === date);
-        const meal = day?.meals.find((m) => m.mealType === mealType);
+        const productKey = normalizeEatenProductKey(product);
+        const meal = day?.meals.find(
+          (m) => m.mealType === mealType && (!productKey || normalizeEatenProductKey(m.product) === productKey),
+        );
         if (meal && meal.amountGrams >= 30) {
           await setEatenProduct(meal.product);
         }
@@ -630,8 +651,8 @@ export function useSchedule() {
   );
 
   const isMealEaten = useCallback(
-    (date: string, mealType: MealType): boolean => {
-      return !!eatenMealsByDate[date]?.[mealType];
+    (date: string, mealType: MealType, product?: string): boolean => {
+      return getMealEatenState(eatenMealsByDate[date], mealType, product);
     },
     [eatenMealsByDate],
   );

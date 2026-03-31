@@ -90,7 +90,7 @@ export interface ShiftOperation {
   product?: string;
 }
 
-export type EatenMealsByDate = Record<string, Partial<Record<MealType, boolean>>>;
+export type EatenMealsByDate = Record<string, Record<string, boolean>>;
 
 export interface UserOverlayState {
   schemaVersion: number;
