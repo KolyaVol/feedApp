@@ -8,7 +8,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build:apk": "npx eas-cli build --platform android --profile preview",
-    "build:apk:prod": "npx eas-cli build --platform android --profile production"
+    "build:dev-client": "npx eas-cli build --platform android --profile development",
+    "build:prod": "npx eas-cli build --platform android --profile production"
   },
   "dependencies": {
     "@expo-google-fonts/nunito": "^0.4.2",

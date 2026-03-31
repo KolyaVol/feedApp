@@ -1,1 +1,47 @@
-{"cli":{"version":">= 12.0.0","appVersionSource":"remote"},"build":{"development":{"developmentClient":true,"distribution":"internal"},"preview":{"distribution":"internal","android":{"buildType":"apk"}},"production":{"android":{"buildType":"apk"}}},"submit":{"production":{}}}
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_GITHUB_API_BASE": "https://api.github.com",
+        "EXPO_PUBLIC_GITHUB_OWNER": "KolyaVol",
+        "EXPO_PUBLIC_GITHUB_REPO": "feedData",
+        "EXPO_PUBLIC_GITHUB_BRANCH": "master",
+        "EXPO_PUBLIC_GITHUB_DATA_JSON_PATH": "data.json"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_GITHUB_API_BASE": "https://api.github.com",
+        "EXPO_PUBLIC_GITHUB_OWNER": "KolyaVol",
+        "EXPO_PUBLIC_GITHUB_REPO": "feedData",
+        "EXPO_PUBLIC_GITHUB_BRANCH": "master",
+        "EXPO_PUBLIC_GITHUB_DATA_JSON_PATH": "data.json"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_GITHUB_API_BASE": "https://api.github.com",
+        "EXPO_PUBLIC_GITHUB_OWNER": "KolyaVol",
+        "EXPO_PUBLIC_GITHUB_REPO": "feedData",
+        "EXPO_PUBLIC_GITHUB_BRANCH": "master",
+        "EXPO_PUBLIC_GITHUB_DATA_JSON_PATH": "data.json"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
