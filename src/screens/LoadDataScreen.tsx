@@ -21,6 +21,7 @@ import { useLocale } from "../contexts/LocaleContext";
 import { usePreferences } from "../contexts/PreferencesContext";
 import { useRemoteFeedContext } from "../remoteFeed/RemoteFeedContext";
 import { parseRemoteJsonText } from "../remoteFeed/api";
+import { mapPlanDaysToGithubSyncDays, parseMealMeta, syncMonthToGithub } from "../remoteFeed/githubSync";
 import { fonts, spacing } from "../theme";
 import type { LoadedSchedule, PlanDay } from "../types";
 import { addDays, addPlanDays, formatDateStr, updatePlanDay as updatePlanDayStorage } from "../data/planDays";
@@ -63,32 +64,6 @@ type MealDraftMeta = {
   eveningFood: string;
   eveningAmount: string;
 };
-
-function parseMealMeta(notes?: string): MealDraftMeta {
-  const raw = notes ?? "";
-  const lines = raw.split("\n");
-  let lunchFood = "";
-  let lunchAmount = "";
-  let eveningFood = "";
-  let eveningAmount = "";
-  const clean: string[] = [];
-  for (const line of lines) {
-    if (line.startsWith("__lunch=")) {
-      const [f, a] = line.replace("__lunch=", "").split("|");
-      lunchFood = (f ?? "").trim();
-      lunchAmount = (a ?? "").trim();
-      continue;
-    }
-    if (line.startsWith("__evening=")) {
-      const [f, a] = line.replace("__evening=", "").split("|");
-      eveningFood = (f ?? "").trim();
-      eveningAmount = (a ?? "").trim();
-      continue;
-    }
-    clean.push(line);
-  }
-  return { notes: clean.join("\n").trim(), lunchFood, lunchAmount, eveningFood, eveningAmount };
-}
 
 function mealFromDay(day: { meals?: Array<{ mealType: string; product: string; amountGrams: number }> } | undefined, type: "lunch" | "evening") {
   if (!day?.meals?.length) return { product: "", amount: "" };
@@ -199,29 +174,6 @@ function toBase64Utf8(text: string): string | null {
   }
 }
 
-function fromBase64Utf8(base64: string): string | null {
-  try {
-    const anyGlobal = globalThis as any;
-    if (anyGlobal?.Buffer?.from) {
-      return anyGlobal.Buffer.from(base64, "base64").toString("utf8");
-    }
-
-    if (typeof atob !== "undefined") {
-      const binary = atob(base64);
-      if (typeof TextDecoder !== "undefined") {
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-          bytes[i] = binary.charCodeAt(i);
-        }
-        return new TextDecoder().decode(bytes);
-      }
-      return binary;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 function jsonString(value: unknown) {
   return JSON.stringify(value, null, 2);
@@ -234,100 +186,6 @@ function readEnv(name: string): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-function githubPathEncode(path: string): string {
-  return path
-    .split("/")
-    .filter(Boolean)
-    .map((seg) => encodeURIComponent(seg))
-    .join("/");
-}
-
-async function readGithubContentsSha(opts: {
-  apiBase: string;
-  owner: string;
-  repo: string;
-  branch: string;
-  path: string;
-  token: string;
-}): Promise<{ sha?: string; text?: string; notFound: boolean }> {
-  const url =
-    `${opts.apiBase.replace(/\/+$/, "")}` +
-    `/repos/${encodeURIComponent(opts.owner)}/${encodeURIComponent(opts.repo)}` +
-    `/contents/${githubPathEncode(opts.path)}?ref=${encodeURIComponent(opts.branch)}&t=${Date.now()}`;
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${opts.token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-  });
-
-  if (res.status === 404) return { sha: undefined, text: undefined, notFound: true };
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`GitHub GET contents failed (${res.status}): ${text || res.statusText}`);
-  }
-
-  const json = (await res.json()) as any;
-  const sha = json?.sha;
-  const contentRaw = typeof json?.content === "string" ? json.content : "";
-  const content = contentRaw.replace(/\n/g, "");
-  let text: string | undefined;
-  if (content) text = fromBase64Utf8(content) ?? undefined;
-  return { sha: typeof sha === "string" ? sha : undefined, text, notFound: false };
-}
-
-async function putGithubContents(opts: {
-  apiBase: string;
-  owner: string;
-  repo: string;
-  branch: string;
-  path: string;
-  token: string;
-  message: string;
-  contentBase64: string;
-  sha?: string;
-}): Promise<{ commitUrl?: string; commitSha?: string }> {
-  const url =
-    `${opts.apiBase.replace(/\/+$/, "")}` +
-    `/repos/${encodeURIComponent(opts.owner)}/${encodeURIComponent(opts.repo)}` +
-    `/contents/${githubPathEncode(opts.path)}`;
-
-  const body: Record<string, unknown> = {
-    message: opts.message,
-    content: opts.contentBase64,
-    branch: opts.branch,
-  };
-  if (opts.sha) body.sha = opts.sha;
-
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${opts.token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`GitHub PUT contents failed (${res.status}): ${text || res.statusText}`);
-  }
-
-  const json = (await res.json()) as any;
-  const commitSha = typeof json?.commit?.sha === "string" ? json.commit.sha : undefined;
-  const commitUrl = typeof json?.commit?.html_url === "string" ? json.commit.html_url : undefined;
-  return { commitSha, commitUrl };
-}
-
-function isGithubConflictError(error: unknown): boolean {
-  const msg = String((error as any)?.message ?? error ?? "");
-  return /\(409\)|\b409\b|Conflict/i.test(msg);
-}
 
 function normalizeDraftDays(days: PlanDay[], amountTextById: Record<string, string>, subsTextById: Record<string, string>): PlanDay[] {
   return days.map((d) => {
@@ -345,76 +203,6 @@ function normalizeDraftDays(days: PlanDay[], amountTextById: Record<string, stri
   });
 }
 
-function dayNumberInWeek(days: PlanDay[], target: PlanDay): number {
-  return days
-    .filter((x) => x.weekNumber === target.weekNumber)
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .findIndex((x) => x.id === target.id) + 1;
-}
-
-function mergeMonthData(root: any, month: number, normalizedDays: PlanDay[]): any {
-  const byWeekDay = new Map<string, PlanDay>();
-  for (const d of normalizedDays) {
-    const day = dayNumberInWeek(normalizedDays, d);
-    byWeekDay.set(`${d.weekNumber}:${day}`, d);
-  }
-
-  const applyToMonth = (monthNode: any) => {
-    if (!monthNode || typeof monthNode !== "object") return;
-
-    if (Array.isArray(monthNode.introduction_plan)) {
-      for (const w of monthNode.introduction_plan) {
-        if (!w || typeof w !== "object" || !Array.isArray(w.days)) continue;
-        const weekNo = Number(w.week);
-        for (const dayNode of w.days) {
-          if (!dayNode || typeof dayNode !== "object") continue;
-          const dayNo = Number(dayNode.day);
-          const draft = byWeekDay.get(`${weekNo}:${dayNo}`);
-          if (!draft) continue;
-          const parsedMeta = parseMealMeta(draft.notes);
-          dayNode.morning = { product: draft.food, amount_grams: draft.amountGrams };
-          if (parsedMeta.lunchFood || parsedMeta.lunchAmount) {
-            const amount = parseInt(parsedMeta.lunchAmount || "0", 10);
-            dayNode.lunch = [{ product: parsedMeta.lunchFood, amount_grams: isNaN(amount) ? 0 : amount }];
-          }
-          if (parsedMeta.eveningFood || parsedMeta.eveningAmount) {
-            const amount = parseInt(parsedMeta.eveningAmount || "0", 10);
-            dayNode.evening = [{ product: parsedMeta.eveningFood, amount_grams: isNaN(amount) ? 0 : amount }];
-          }
-          dayNode.notes = parsedMeta.notes || "";
-        }
-      }
-    }
-
-    if (Array.isArray(monthNode.weekly_schedule)) {
-      for (const w of monthNode.weekly_schedule) {
-        if (!w || typeof w !== "object" || !Array.isArray(w.days)) continue;
-        const weekNo = Number(w.week);
-        for (const dayNode of w.days) {
-          if (!dayNode || typeof dayNode !== "object") continue;
-          const dayNo = Number(dayNode.day);
-          const draft = byWeekDay.get(`${weekNo}:${dayNo}`);
-          if (!draft) continue;
-          dayNode.time = draft.time;
-          dayNode.food_type = draft.foodType;
-          dayNode.food = draft.food;
-          dayNode.amount_grams = draft.amountGrams;
-          dayNode.substitutions = draft.substitutions.length ? draft.substitutions : undefined;
-          dayNode.notes = draft.notes || undefined;
-        }
-      }
-    }
-  };
-
-  const nextRoot = JSON.parse(JSON.stringify(root));
-  if (Array.isArray(nextRoot?.months)) {
-    const target = nextRoot.months.find((m: any) => Number(m?.month) === month);
-    if (target) applyToMonth(target);
-  } else if (Number(nextRoot?.month) === month) {
-    applyToMonth(nextRoot);
-  }
-  return nextRoot;
-}
 
 function buildScheduleJson(schedule: LoadedSchedule, days: PlanDay[]): ScheduleJson {
   const weekly = new Map<number, PlanDay[]>();
@@ -602,97 +390,30 @@ export function LoadDataScreen() {
     if (!selectedSchedule) return { ok: false, text: "No schedule selected." };
     if (!dirty) return { ok: false, text: "No changes to send." };
     if (amountInvalidCount > 0) return { ok: false, text: "Fix invalid amount cells before sending." };
-
-    const token = readEnv("EXPO_PUBLIC_GITHUB_TOKEN") ?? readEnv("GITHUB_TOKEN");
-    const owner = readEnv("EXPO_PUBLIC_GITHUB_OWNER") ?? readEnv("GITHUB_OWNER");
-    const repo = readEnv("EXPO_PUBLIC_GITHUB_REPO") ?? readEnv("GITHUB_REPO");
-    const branch = readEnv("EXPO_PUBLIC_GITHUB_BRANCH") ?? readEnv("GITHUB_BRANCH") ?? "main";
-    const path = readEnv("EXPO_PUBLIC_GITHUB_DATA_JSON_PATH") ?? readEnv("GITHUB_DATA_JSON_PATH") ?? "data.json";
-    const apiBase = readEnv("EXPO_PUBLIC_GITHUB_API_BASE") ?? readEnv("GITHUB_API_BASE") ?? "https://api.github.com";
-
-    if (!token || !owner || !repo) {
-      return {
-        ok: false,
-        text:
-          `Missing env.\n` +
-          `Need: EXPO_PUBLIC_GITHUB_TOKEN, EXPO_PUBLIC_GITHUB_OWNER, EXPO_PUBLIC_GITHUB_REPO\n` +
-          `Optional: EXPO_PUBLIC_GITHUB_BRANCH, EXPO_PUBLIC_GITHUB_DATA_JSON_PATH, EXPO_PUBLIC_GITHUB_API_BASE`,
-        scheduleText: undefined,
-      };
-    }
-
-    try {
-      const normalizedDays = normalizeDraftDays(draftDaysSorted, amountTextById, subsTextById);
-      const current = await readGithubContentsSha({ apiBase, owner, repo, branch, path, token });
-      if (current.notFound || !current.text) {
-        return { ok: false, text: "Target JSON file not found on GitHub.", scheduleText: undefined };
-      }
-      let rootJson: any;
-      try {
-        rootJson = JSON.parse(current.text);
-      } catch {
-        return { ok: false, text: "Current GitHub JSON is invalid and cannot be merged safely.", scheduleText: undefined };
-      }
-      const merged = mergeMonthData(rootJson, selectedSchedule.month, normalizedDays);
-      const mergedText = jsonString(merged);
-      const contentBase64 = toBase64Utf8(mergedText);
-      if (!contentBase64) {
-        return { ok: false, text: "Base64 encoding is unavailable (globalThis.btoa missing).", scheduleText: undefined };
-      }
-      const changes = listChangedFields({ originalById, draftById, amountTextById, subsTextById });
-      const start = selectedSchedule.startDate;
-      const first = changes[0];
-      const summary =
-        changes.length === 1 && first
-          ? `${t("loadDataDay")} ${dayIndexFromStart(start, first.day.date)}: ${first.fields.join(", ")}`
-          : changes.length
-            ? `${changes.length} days updated`
-            : "Update";
-      const message = `${summary} (${path})`;
-
-      let nextSha = current.sha;
-      let nextBase64 = contentBase64;
-      let put: { commitUrl?: string; commitSha?: string } | null = null;
-      let lastError: unknown = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          put = await putGithubContents({
-            apiBase,
-            owner,
-            repo,
-            branch,
-            path,
-            token,
-            message,
-            contentBase64: nextBase64,
-            sha: nextSha,
-          });
-          break;
-        } catch (error) {
-          lastError = error;
-          if (!isGithubConflictError(error) || attempt === 2) break;
-          const latest = await readGithubContentsSha({ apiBase, owner, repo, branch, path, token });
-          if (latest.notFound || !latest.text) break;
-          const latestRoot = JSON.parse(latest.text);
-          const latestMerged = mergeMonthData(latestRoot, selectedSchedule.month, normalizedDays);
-          const latestBase64 = toBase64Utf8(jsonString(latestMerged));
-          if (!latestBase64) break;
-          nextSha = latest.sha;
-          nextBase64 = latestBase64;
-        }
-      }
-      if (!put) throw lastError ?? new Error("GitHub PUT failed");
-      const text = [
-        t("loadDataSendSuccess"),
-        put.commitSha ? `commitSha: ${put.commitSha}` : "",
-        put.commitUrl ? `commitUrl: ${put.commitUrl}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
-      return { ok: true, text, scheduleText: mergedText };
-    } catch (e) {
-      return { ok: false, text: String((e as any)?.message ?? e), scheduleText: undefined };
-    }
+    const syncDays = mapPlanDaysToGithubSyncDays(draftDaysSorted, amountTextById, subsTextById);
+    const changes = listChangedFields({ originalById, draftById, amountTextById, subsTextById });
+    const start = selectedSchedule.startDate;
+    const first = changes[0];
+    const message =
+      changes.length === 1 && first
+        ? `${t("loadDataDay")} ${dayIndexFromStart(start, first.day.date)}: ${first.fields.join(", ")}`
+        : changes.length
+          ? `${changes.length} days updated`
+          : "Update";
+    const result = await syncMonthToGithub({
+      month: selectedSchedule.month,
+      days: syncDays,
+      message,
+    });
+    if (!result.ok) return { ok: false, text: result.text, scheduleText: undefined };
+    const text = [
+      t("loadDataSendSuccess"),
+      result.commitSha ? `commitSha: ${result.commitSha}` : "",
+      result.commitUrl ? `commitUrl: ${result.commitUrl}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    return { ok: true, text, scheduleText: result.scheduleText };
   }, [amountInvalidCount, amountTextById, dirty, draftById, draftDaysSorted, originalById, selectedSchedule, subsTextById, t]);
 
   const refreshAfterSuccessfulSend = useCallback(async (scheduleText?: string) => {
@@ -937,6 +658,11 @@ export function LoadDataScreen() {
               {draftDaysSorted.map((d) => {
                 const amountText = amountTextById[d.id] ?? String(d.amountGrams);
                 const isProgress = d.date === progressDayStr;
+                const cardInputBorderColor = isProgress
+                  ? isDarkUi
+                    ? "rgba(255,255,255,0.55)"
+                    : "rgba(120,120,120,0.75)"
+                  : colors.borderLight;
                 const remoteDay = d.scheduleId.startsWith("remote-")
                   ? remoteDayPlans.find((x) => x.date === d.date)
                   : undefined;
@@ -1010,7 +736,7 @@ export function LoadDataScreen() {
                             style={[
                               styles.fieldInput,
                               styles.fieldMultiline,
-                              { borderColor: colors.borderLight, color: colors.text },
+                              { borderColor: cardInputBorderColor, color: colors.text },
                             ]}
                             value={morningFoodValue}
                             onChangeText={(v) => updateDay(d.id, { food: v })}
@@ -1024,7 +750,7 @@ export function LoadDataScreen() {
                               style={[
                                 styles.fieldInput,
                                 styles.amountInput,
-                                { borderColor: morningAmountBad ? colors.danger : colors.borderLight, color: colors.text },
+                                { borderColor: morningAmountBad ? colors.danger : cardInputBorderColor, color: colors.text },
                               ]}
                               value={morningAmountText}
                               onChangeText={(v) => setAmountTextById((prev) => ({ ...prev, [d.id]: v }))}
@@ -1049,7 +775,7 @@ export function LoadDataScreen() {
                                 style={[
                                   styles.fieldInput,
                                   styles.fieldMultiline,
-                                  { borderColor: colors.borderLight, color: colors.text },
+                                  { borderColor: cardInputBorderColor, color: colors.text },
                                 ]}
                                 value={row.food}
                                 onChangeText={(v) => {
@@ -1066,7 +792,7 @@ export function LoadDataScreen() {
                               />
                               <View style={styles.amountRow}>
                                 <TextInput
-                                  style={[styles.fieldInput, styles.amountInput, { borderColor: colors.borderLight, color: colors.text }]}
+                                  style={[styles.fieldInput, styles.amountInput, { borderColor: cardInputBorderColor, color: colors.text }]}
                                   value={row.amount}
                                   onChangeText={(v) => {
                                     const next = lunchRows.map((x, i) => (i === idx ? { ...x, amount: v } : x));
@@ -1098,7 +824,7 @@ export function LoadDataScreen() {
                                 style={[
                                   styles.fieldInput,
                                   styles.fieldMultiline,
-                                  { borderColor: colors.borderLight, color: colors.text },
+                                  { borderColor: cardInputBorderColor, color: colors.text },
                                 ]}
                                 value={row.food}
                                 onChangeText={(v) => {
@@ -1115,7 +841,7 @@ export function LoadDataScreen() {
                               />
                               <View style={styles.amountRow}>
                                 <TextInput
-                                  style={[styles.fieldInput, styles.amountInput, { borderColor: colors.borderLight, color: colors.text }]}
+                                  style={[styles.fieldInput, styles.amountInput, { borderColor: cardInputBorderColor, color: colors.text }]}
                                   value={row.amount}
                                   onChangeText={(v) => {
                                     const next = eveningRows.map((x, i) => (i === idx ? { ...x, amount: v } : x));

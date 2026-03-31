@@ -21,6 +21,7 @@ import { useTheme } from "../contexts/ThemeContext";
 import { useLocale } from "../contexts/LocaleContext";
 import { usePreferences } from "../contexts/PreferencesContext";
 import { dateToTime, timeToDate } from "../utils/date";
+import { syncMonthToGithub } from "../remoteFeed/githubSync";
 
 export function MainScreen() {
   const insets = useSafeAreaInsets();
@@ -71,6 +72,7 @@ export function MainScreen() {
   const [replaceAmountText, setReplaceAmountText] = React.useState("0");
   const [replacing, setReplacing] = React.useState(false);
   const [replaceInStreak, setReplaceInStreak] = React.useState(false);
+  const [syncToast, setSyncToast] = React.useState<{ kind: "success" | "error"; text: string } | null>(null);
 
   const allSeenProducts = useMemo(() => {
     const seen = new Map<string, string>();
@@ -200,6 +202,7 @@ export function MainScreen() {
     const amount = parseInt(replaceAmountText.trim(), 10);
     if (!replaceProduct.trim() || !Number.isFinite(amount) || amount < 0) return;
     setReplacing(true);
+    const replacementsForSync: Array<{ date: string; mealType: "morning" | "lunch" | "evening"; product: string; amountGrams: number }> = [];
     if (replaceInStreak && !replaceProductIsEaten) {
       const day = remoteDayPlans.find((d) => d.date === progressDateStr);
       const meal = day?.meals.find((m) => m.mealType === replaceMealType);
@@ -216,17 +219,69 @@ export function MainScreen() {
         if (items.length) {
           items[0] = { ...items[0], amountGrams: amount };
           await replaceMealsBulk(items);
+          replacementsForSync.push(...items);
         } else {
           await replaceShiftedMealAtSlot(progressDateStr, replaceMealType, replaceProduct, amount);
+          replacementsForSync.push({ date: progressDateStr, mealType: replaceMealType, product: replaceProduct, amountGrams: amount });
         }
       } else {
         await replaceShiftedMealAtSlot(progressDateStr, replaceMealType, replaceProduct, amount);
+        replacementsForSync.push({ date: progressDateStr, mealType: replaceMealType, product: replaceProduct, amountGrams: amount });
       }
     } else {
       await replaceShiftedMealAtSlot(progressDateStr, replaceMealType, replaceProduct, amount);
+      replacementsForSync.push({ date: progressDateStr, mealType: replaceMealType, product: replaceProduct, amountGrams: amount });
     }
     setReplacing(false);
     setReplaceModalVisible(false);
+
+    const uniqueByDate = new Map<string, { date: string; mealType: "morning" | "lunch" | "evening"; product: string; amountGrams: number }>();
+    for (const item of replacementsForSync) uniqueByDate.set(`${item.date}:${item.mealType}`, item);
+    const byMonth = new Map<number, Array<{ date: string; mealType: "morning" | "lunch" | "evening"; product: string; amountGrams: number }>>();
+    for (const item of uniqueByDate.values()) {
+      const day = remoteDayPlans.find((d) => d.date === item.date);
+      if (!day) continue;
+      const list = byMonth.get(day.sourceMonth) ?? [];
+      list.push(item);
+      byMonth.set(day.sourceMonth, list);
+    }
+    let failed = false;
+    for (const [month, monthItems] of byMonth) {
+      const days = monthItems
+        .map((item) => {
+          const day = remoteDayPlans.find((d) => d.date === item.date);
+          if (!day) return null;
+          const meals = day.meals.map((m) =>
+            m.mealType === item.mealType ? { ...m, product: item.product, amountGrams: item.amountGrams } : m,
+          );
+          const morning = meals.find((m) => m.mealType === "morning");
+          const lunch = meals.filter((m) => m.mealType === "lunch");
+          const evening = meals.filter((m) => m.mealType === "evening");
+          return {
+            weekNumber: day.weekNumber,
+            dayNumber: day.dayNumber,
+            morning: morning ? { product: morning.product, amountGrams: morning.amountGrams } : undefined,
+            lunch: lunch.map((m) => ({ product: m.product, amountGrams: m.amountGrams })),
+            evening: evening.map((m) => ({ product: m.product, amountGrams: m.amountGrams })),
+            notes: day.notes ?? "",
+          };
+        })
+        .filter(Boolean);
+      if (!days.length) continue;
+      const result = await syncMonthToGithub({
+        month,
+        days,
+        message: `Replace ${replaceMealType} on ${progressDateStr}`,
+      });
+      if (!result.ok) {
+        failed = true;
+        setSyncToast({ kind: "error", text: `GitHub sync failed: ${result.text}` });
+        break;
+      }
+    }
+    if (!failed && byMonth.size > 0) {
+      setSyncToast({ kind: "success", text: "Replacements synced to GitHub" });
+    }
   }, [
     progressDateStr,
     replaceAmountText,
@@ -238,6 +293,12 @@ export function MainScreen() {
     replaceShiftedMealAtSlot,
     remoteDayPlans,
   ]);
+
+  useEffect(() => {
+    if (!syncToast) return;
+    const timer = setTimeout(() => setSyncToast(null), 2600);
+    return () => clearTimeout(timer);
+  }, [syncToast]);
 
   const todayStr = useMemo(() => {
     const now = new Date(progressDateStr + "T00:00:00");
@@ -693,6 +754,18 @@ export function MainScreen() {
           </View>
         </View>
       </Modal>
+      {syncToast ? (
+        <View
+          style={[
+            styles.toast,
+            syncToast.kind === "success"
+              ? { backgroundColor: colors.pastelGreen, borderColor: colors.primary }
+              : { backgroundColor: colors.chipBg, borderColor: colors.pastelRed },
+          ]}
+        >
+          <Text style={[styles.toastText, { color: colors.text }]}>{syncToast.text}</Text>
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -891,6 +964,19 @@ function useLocalStyles(colors: {
         },
         emptyHint: {
           marginTop: 8,
+          textAlign: "center",
+        },
+        toast: {
+          marginHorizontal: spacing.screenPadding,
+          marginBottom: 10,
+          borderWidth: 1,
+          borderRadius: spacing.radiusMd,
+          paddingVertical: 10,
+          paddingHorizontal: 12,
+        },
+        toastText: {
+          fontSize: 13,
+          fontFamily: fonts.medium,
           textAlign: "center",
         },
       }),
