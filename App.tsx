@@ -1,11 +1,12 @@
 import React, { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
+import * as NavigationBar from "expo-navigation-bar";
 import { useFonts } from "expo-font";
 import * as DevClient from "expo-dev-client";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { Text, View, Platform } from "react-native";
+import { AppState, Text, View, Platform } from "react-native";
 import {
   Nunito_400Regular,
   Nunito_500Medium,
@@ -136,6 +137,41 @@ export default function App() {
     if (__DEV__ && Platform.OS !== "web") {
       DevClient.hideMenu();
     }
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") {
+      return;
+    }
+
+    const applyAndroidNavBarMode = async () => {
+      try {
+        await NavigationBar.setVisibilityAsync("hidden");
+      } catch {}
+
+      try {
+        await NavigationBar.setBehaviorAsync("overlay-swipe");
+      } catch {}
+    };
+
+    void applyAndroidNavBarMode();
+
+    const appStateSubscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        void applyAndroidNavBarMode();
+      }
+    });
+
+    const visibilitySubscription = NavigationBar.addVisibilityListener(({ visibility }) => {
+      if (visibility === "visible") {
+        void NavigationBar.setVisibilityAsync("hidden");
+      }
+    });
+
+    return () => {
+      appStateSubscription.remove();
+      visibilitySubscription.remove();
+    };
   }, []);
 
   if (!fontsLoaded) return null;

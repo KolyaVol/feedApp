@@ -33,6 +33,14 @@
       "expo-font",
       "expo-mail-composer",
       [
+        "expo-navigation-bar",
+        {
+          "visibility": "hidden",
+          "behavior": "overlay-swipe",
+          "legacyVisible": "sticky-immersive"
+        }
+      ],
+      [
         "expo-dev-client",
         {
           "launchMode": "most-recent"
