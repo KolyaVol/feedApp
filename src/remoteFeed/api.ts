@@ -99,20 +99,32 @@ function parseMealMetaFromNotes(notes?: string): {
   for (const line of lines) {
     if (line.startsWith("__lunch=")) {
       const [productRaw, amountRaw] = line.replace("__lunch=", "").split("|");
-      const product = (productRaw ?? "").trim();
-      const amount = Number((amountRaw ?? "").trim());
-      if (product && Number.isFinite(amount)) {
-        lunch = [{ product, amount_grams: amount }];
-      }
+      const products = (productRaw ?? "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
+      const amounts = (amountRaw ?? "")
+        .split(",")
+        .map((x) => Number(x.trim()));
+      const meals = products
+        .map((product, idx) => ({ product, amount_grams: Number.isFinite(amounts[idx]) ? amounts[idx]! : 0 }))
+        .filter((m) => m.product);
+      if (meals.length) lunch = meals;
       continue;
     }
     if (line.startsWith("__evening=")) {
       const [productRaw, amountRaw] = line.replace("__evening=", "").split("|");
-      const product = (productRaw ?? "").trim();
-      const amount = Number((amountRaw ?? "").trim());
-      if (product && Number.isFinite(amount)) {
-        evening = [{ product, amount_grams: amount }];
-      }
+      const products = (productRaw ?? "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
+      const amounts = (amountRaw ?? "")
+        .split(",")
+        .map((x) => Number(x.trim()));
+      const meals = products
+        .map((product, idx) => ({ product, amount_grams: Number.isFinite(amounts[idx]) ? amounts[idx]! : 0 }))
+        .filter((m) => m.product);
+      if (meals.length) evening = meals;
       continue;
     }
     clean.push(line);

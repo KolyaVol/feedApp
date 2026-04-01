@@ -264,6 +264,7 @@ export function LoadDataScreen() {
   const [draftById, setDraftById] = useState<Record<string, PlanDay>>({});
   const [amountTextById, setAmountTextById] = useState<Record<string, string>>({});
   const [subsTextById, setSubsTextById] = useState<Record<string, string>>({});
+  const [extraMealRowsByKey, setExtraMealRowsByKey] = useState<Record<string, number>>({});
   const [originalJsonText, setOriginalJsonText] = useState<string>("");
   const [originalById, setOriginalById] = useState<Record<string, PlanDay>>({});
 
@@ -356,7 +357,12 @@ export function LoadDataScreen() {
     setDraftById((prev) => ({ ...prev, [day.id]: { ...(prev[day.id] ?? day), ...updates } }));
   }, []);
 
-  const openPayloadPreview = useCallback(() => {
+  const addExtraMealRow = useCallback((dayId: string, mealType: "lunch" | "evening") => {
+    const key = `${dayId}:${mealType}`;
+    setExtraMealRowsByKey((prev) => ({ ...prev, [key]: (prev[key] ?? 0) + 1 }));
+  }, []);
+
+  const openPayloadPreview = useCallback((resultMessage?: string) => {
     if (!selectedSchedule) return;
     const content = draftJsonText;
     const contentBase64 = toBase64Utf8(content);
@@ -373,13 +379,14 @@ export function LoadDataScreen() {
         payload,
         contentPreview: content,
         base64Available: !!contentBase64,
+        fallbackInfo: resultMessage || undefined,
       }),
     );
-    setGithubResultText("");
+    setGithubResultText(resultMessage ?? "");
     setPayloadModalVisible(true);
   }, [draftJsonText, selectedSchedule]);
 
-  const performGithubSend = useCallback(async (): Promise<{ ok: boolean; text: string; scheduleText?: string }> => {
+  const performGithubSend = useCallback(async (): Promise<{ ok: boolean; text: string; scheduleText?: string; errorCode?: string }> => {
     if (!selectedSchedule) return { ok: false, text: "No schedule selected." };
     if (!dirty) return { ok: false, text: "No changes to send." };
     if (amountInvalidCount > 0) return { ok: false, text: "Fix invalid amount cells before sending." };
@@ -398,7 +405,7 @@ export function LoadDataScreen() {
       days: syncDays,
       message,
     });
-    if (!result.ok) return { ok: false, text: result.text, scheduleText: undefined };
+    if (!result.ok) return { ok: false, text: result.text, scheduleText: undefined, errorCode: result.errorCode };
     const text = [
       t("loadDataSendSuccess"),
       result.commitSha ? `commitSha: ${result.commitSha}` : "",
@@ -409,15 +416,45 @@ export function LoadDataScreen() {
     return { ok: true, text, scheduleText: result.scheduleText };
   }, [amountInvalidCount, amountTextById, dirty, draftById, draftDaysSorted, originalById, selectedSchedule, subsTextById, t]);
 
+  const persistDraftLocally = useCallback(async (): Promise<{ ok: boolean; text: string }> => {
+    const normalized = normalizeDraftDays(draftDaysSorted, amountTextById, subsTextById);
+    let saved = 0;
+    for (const day of normalized) {
+      const updates: Partial<PlanDay> = {
+        time: day.time,
+        foodType: day.foodType,
+        food: day.food,
+        amountGrams: day.amountGrams,
+        substitutions: day.substitutions,
+        notes: day.notes,
+      };
+      try {
+        await updatePlanDayStorage(day.id, updates);
+        saved += 1;
+      } catch {
+        await addPlanDays([{ ...day, ...updates, id: generateId(), scheduleId: day.scheduleId }]);
+        saved += 1;
+      }
+    }
+    await refresh();
+    return { ok: true, text: `Saved locally: ${saved} day(s).` };
+  }, [amountTextById, draftDaysSorted, refresh, subsTextById]);
+
   const refreshAfterSuccessfulSend = useCallback(async (scheduleText?: string) => {
+    let applied = false;
     if (scheduleText && remote?.applySchedule) {
       const parsed = parseRemoteJsonText(scheduleText);
       if (parsed) {
         await remote.applySchedule(parsed);
+        applied = true;
       }
     }
+    if (!applied && remote?.refresh) {
+      await remote.refresh();
+    }
+    await refresh();
     triggerGlobalScheduleRefresh();
-  }, [remote]);
+  }, [refresh, remote]);
 
   const sendToGithub = useCallback(async () => {
     if (!selectedSchedule) return;
@@ -434,8 +471,12 @@ export function LoadDataScreen() {
         text: result.ok ? t("loadDataSendSuccess") : t("loadDataSendError"),
       });
     }
+    if (!result.ok && result.errorCode === "missing_config") {
+      const localPersist = await persistDraftLocally();
+      openPayloadPreview(`${result.text}\n${localPersist.text}`);
+    }
     setGithubSending(false);
-  }, [isDeveloper, performGithubSend, refreshAfterSuccessfulSend, selectedSchedule, t]);
+  }, [isDeveloper, openPayloadPreview, performGithubSend, persistDraftLocally, refreshAfterSuccessfulSend, selectedSchedule, t]);
 
   const onPressSendData = useCallback(async () => {
     if (isDeveloper) {
@@ -449,11 +490,15 @@ export function LoadDataScreen() {
       await refreshAfterSuccessfulSend(result.scheduleText);
     }
     setGithubSending(false);
+    if (!result.ok && result.errorCode === "missing_config") {
+      const localPersist = await persistDraftLocally();
+      openPayloadPreview(`${result.text}\n${localPersist.text}`);
+    }
     setToast({
       kind: result.ok ? "success" : "error",
       text: result.ok ? t("loadDataSendSuccess") : `${t("loadDataSendError")}: ${result.text}`,
     });
-  }, [isDeveloper, openPayloadPreview, performGithubSend, refreshAfterSuccessfulSend, selectedSchedule, t]);
+  }, [isDeveloper, openPayloadPreview, performGithubSend, persistDraftLocally, refreshAfterSuccessfulSend, selectedSchedule, t]);
 
   useEffect(() => {
     if (!toast) return;
@@ -674,11 +719,18 @@ export function LoadDataScreen() {
                   eveningFood: parsedMeta.eveningFood || eveningExisting.product,
                   eveningAmount: parsedMeta.eveningAmount || eveningExisting.amount,
                 };
-                const hasBreakfast = !!(morningFoodValue || morningAmountText.trim() || morningRemote?.product || morningRemote?.amountGrams);
-                const hasLunch = !!(mealMeta.lunchFood || mealMeta.lunchAmount);
-                const hasEvening = !!(mealMeta.eveningFood || mealMeta.eveningAmount);
                 const lunchRows = mealRows(mealMeta.lunchFood, mealMeta.lunchAmount);
                 const eveningRows = mealRows(mealMeta.eveningFood, mealMeta.eveningAmount);
+                const lunchExtraRows = extraMealRowsByKey[`${d.id}:lunch`] ?? 0;
+                const eveningExtraRows = extraMealRowsByKey[`${d.id}:evening`] ?? 0;
+                const lunchRowsWithExtra = [
+                  ...lunchRows,
+                  ...Array.from({ length: lunchExtraRows }, () => ({ food: "", amount: "" })),
+                ];
+                const eveningRowsWithExtra = [
+                  ...eveningRows,
+                  ...Array.from({ length: eveningExtraRows }, () => ({ food: "", amount: "" })),
+                ];
                 return (
                   <View
                     key={d.id}
@@ -718,49 +770,46 @@ export function LoadDataScreen() {
                     </View>
 
                     <View style={styles.fieldsWrap}>
-                      {hasBreakfast ? (
-                        <View style={[styles.field, styles.fieldFull, styles.mealSection, { borderColor: colors.borderLight }]}>
-                          <Text style={[styles.fieldLabel, styles.mealSectionTitle, { color: colors.textMuted }]}>
-                            {t("mealBreakfast")}
-                            {isMealEaten(d.date, "morning", morningFoodValue) ? ` · ${t("loadDataMealEatenSuffix")}` : ""}
-                          </Text>
+                      <View style={[styles.field, styles.fieldFull, styles.mealSection, { borderColor: colors.borderLight }]}>
+                        <Text style={[styles.fieldLabel, styles.mealSectionTitle, { color: colors.textMuted }]}>
+                          {t("mealBreakfast")}
+                          {isMealEaten(d.date, "morning", morningFoodValue) ? ` · ${t("loadDataMealEatenSuffix")}` : ""}
+                        </Text>
+                        <TextInput
+                          style={[
+                            styles.fieldInput,
+                            styles.fieldMultiline,
+                            { borderColor: cardInputBorderColor, color: colors.text },
+                          ]}
+                          value={morningFoodValue}
+                          onChangeText={(v) => updateDay(d.id, { food: v })}
+                          multiline
+                          textAlignVertical="top"
+                          placeholder={t("loadDataColFood")}
+                          placeholderTextColor={colors.placeholder}
+                        />
+                        <View style={styles.amountRow}>
                           <TextInput
                             style={[
                               styles.fieldInput,
-                              styles.fieldMultiline,
-                              { borderColor: cardInputBorderColor, color: colors.text },
+                              styles.amountInput,
+                              { borderColor: morningAmountBad ? colors.danger : cardInputBorderColor, color: colors.text },
                             ]}
-                            value={morningFoodValue}
-                            onChangeText={(v) => updateDay(d.id, { food: v })}
-                            multiline
-                            textAlignVertical="top"
-                            placeholder={t("loadDataColFood")}
+                            value={morningAmountText}
+                            onChangeText={(v) => setAmountTextById((prev) => ({ ...prev, [d.id]: v }))}
+                            keyboardType="numeric"
+                            placeholder={`${t("loadDataColAmount")} (${t("loadDataGrams")})`}
                             placeholderTextColor={colors.placeholder}
                           />
-                          <View style={styles.amountRow}>
-                            <TextInput
-                              style={[
-                                styles.fieldInput,
-                                styles.amountInput,
-                                { borderColor: morningAmountBad ? colors.danger : cardInputBorderColor, color: colors.text },
-                              ]}
-                              value={morningAmountText}
-                              onChangeText={(v) => setAmountTextById((prev) => ({ ...prev, [d.id]: v }))}
-                              keyboardType="numeric"
-                              placeholder={`${t("loadDataColAmount")} (${t("loadDataGrams")})`}
-                              placeholderTextColor={colors.placeholder}
-                            />
-                          </View>
                         </View>
-                      ) : null}
+                      </View>
 
-                      {hasLunch ? (
-                        <View style={[styles.field, styles.fieldFull, styles.mealSection, { borderColor: colors.borderLight }]}>
-                          <Text style={[styles.fieldLabel, styles.mealSectionTitle, { color: colors.textMuted }]}>
-                            {t("mealLunch")}
-                            {isMealEaten(d.date, "lunch", mealMeta.lunchFood) ? ` · ${t("loadDataMealEatenSuffix")}` : ""}
-                          </Text>
-                          {lunchRows.map((row, idx) => (
+                      <View style={[styles.field, styles.fieldFull, styles.mealSection, { borderColor: colors.borderLight }]}>
+                        <Text style={[styles.fieldLabel, styles.mealSectionTitle, { color: colors.textMuted }]}>
+                          {t("mealLunch")}
+                          {isMealEaten(d.date, "lunch", mealMeta.lunchFood) ? ` · ${t("loadDataMealEatenSuffix")}` : ""}
+                        </Text>
+                        {lunchRowsWithExtra.map((row, idx) => (
                             <View key={`lunch-${d.id}-${idx}`} style={styles.mealRow}>
                               <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{`${t("loadDataColFood")} ${idx + 1}`}</Text>
                               <TextInput
@@ -771,7 +820,7 @@ export function LoadDataScreen() {
                                 ]}
                                 value={row.food}
                                 onChangeText={(v) => {
-                                  const next = lunchRows.map((x, i) => (i === idx ? { ...x, food: v } : x));
+                                  const next = lunchRowsWithExtra.map((x, i) => (i === idx ? { ...x, food: v } : x));
                                   const merged = joinMealRows(next);
                                   updateDay(d.id, {
                                     notes: buildMealMeta({ ...mealMeta, lunchFood: merged.food, lunchAmount: merged.amount }),
@@ -787,7 +836,7 @@ export function LoadDataScreen() {
                                   style={[styles.fieldInput, styles.amountInput, { borderColor: cardInputBorderColor, color: colors.text }]}
                                   value={row.amount}
                                   onChangeText={(v) => {
-                                    const next = lunchRows.map((x, i) => (i === idx ? { ...x, amount: v } : x));
+                                    const next = lunchRowsWithExtra.map((x, i) => (i === idx ? { ...x, amount: v } : x));
                                     const merged = joinMealRows(next);
                                     updateDay(d.id, {
                                       notes: buildMealMeta({ ...mealMeta, lunchFood: merged.food, lunchAmount: merged.amount }),
@@ -800,16 +849,20 @@ export function LoadDataScreen() {
                               </View>
                             </View>
                           ))}
-                        </View>
-                      ) : null}
+                        <TouchableOpacity
+                          style={[styles.addRowBtn, { borderColor: colors.borderLight }]}
+                          onPress={() => addExtraMealRow(d.id, "lunch")}
+                        >
+                          <Text style={[styles.addRowBtnText, { color: colors.primary }]}>{t("loadDataAddProductRow")}</Text>
+                        </TouchableOpacity>
+                      </View>
 
-                      {hasEvening ? (
-                        <View style={[styles.field, styles.fieldFull, styles.mealSection, { borderColor: colors.borderLight }]}>
-                          <Text style={[styles.fieldLabel, styles.mealSectionTitle, { color: colors.textMuted }]}>
-                            {t("mealEvening")}
-                            {isMealEaten(d.date, "evening", mealMeta.eveningFood) ? ` · ${t("loadDataMealEatenSuffix")}` : ""}
-                          </Text>
-                          {eveningRows.map((row, idx) => (
+                      <View style={[styles.field, styles.fieldFull, styles.mealSection, { borderColor: colors.borderLight }]}>
+                        <Text style={[styles.fieldLabel, styles.mealSectionTitle, { color: colors.textMuted }]}>
+                          {t("mealEvening")}
+                          {isMealEaten(d.date, "evening", mealMeta.eveningFood) ? ` · ${t("loadDataMealEatenSuffix")}` : ""}
+                        </Text>
+                        {eveningRowsWithExtra.map((row, idx) => (
                             <View key={`evening-${d.id}-${idx}`} style={styles.mealRow}>
                               <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{`${t("loadDataColFood")} ${idx + 1}`}</Text>
                               <TextInput
@@ -820,7 +873,7 @@ export function LoadDataScreen() {
                                 ]}
                                 value={row.food}
                                 onChangeText={(v) => {
-                                  const next = eveningRows.map((x, i) => (i === idx ? { ...x, food: v } : x));
+                                    const next = eveningRowsWithExtra.map((x, i) => (i === idx ? { ...x, food: v } : x));
                                   const merged = joinMealRows(next);
                                   updateDay(d.id, {
                                     notes: buildMealMeta({ ...mealMeta, eveningFood: merged.food, eveningAmount: merged.amount }),
@@ -836,7 +889,7 @@ export function LoadDataScreen() {
                                   style={[styles.fieldInput, styles.amountInput, { borderColor: cardInputBorderColor, color: colors.text }]}
                                   value={row.amount}
                                   onChangeText={(v) => {
-                                    const next = eveningRows.map((x, i) => (i === idx ? { ...x, amount: v } : x));
+                                    const next = eveningRowsWithExtra.map((x, i) => (i === idx ? { ...x, amount: v } : x));
                                     const merged = joinMealRows(next);
                                     updateDay(d.id, {
                                       notes: buildMealMeta({ ...mealMeta, eveningFood: merged.food, eveningAmount: merged.amount }),
@@ -849,8 +902,13 @@ export function LoadDataScreen() {
                               </View>
                             </View>
                           ))}
-                        </View>
-                      ) : null}
+                        <TouchableOpacity
+                          style={[styles.addRowBtn, { borderColor: colors.borderLight }]}
+                          onPress={() => addExtraMealRow(d.id, "evening")}
+                        >
+                          <Text style={[styles.addRowBtnText, { color: colors.primary }]}>{t("loadDataAddProductRow")}</Text>
+                        </TouchableOpacity>
+                      </View>
 
                     </View>
                   </View>
@@ -1198,6 +1256,18 @@ function useLocalStyles(colors: {
         },
         mealRow: {
           paddingBottom: 8,
+        },
+        addRowBtn: {
+          borderWidth: 1,
+          borderRadius: spacing.radiusMd,
+          paddingVertical: 8,
+          paddingHorizontal: 10,
+          alignSelf: "flex-start",
+          marginTop: 4,
+        },
+        addRowBtnText: {
+          fontSize: 13,
+          fontFamily: fonts.medium,
         },
         fieldLabel: {
           fontSize: 12,

@@ -5,12 +5,13 @@ import {
   GITHUB_DATA_JSON_PATH,
   GITHUB_OWNER,
   GITHUB_REPO,
-  GITHUB_TOKEN,
 } from "./env";
+import { loadGithubToken } from "./storage";
 
 export type GithubSyncMeal = { product: string; amountGrams: number };
 
 export type GithubSyncDay = {
+  sequence?: number;
   weekNumber: number;
   dayNumber: number;
   morning?: GithubSyncMeal;
@@ -30,6 +31,7 @@ export type GithubSyncResult = {
   scheduleText?: string;
   commitSha?: string;
   commitUrl?: string;
+  errorCode?: "missing_config";
 };
 
 function toBase64Utf8(text: string): string | null {
@@ -169,19 +171,25 @@ function isGithubConflictError(error: unknown): boolean {
 
 function mergeMonthData(root: any, month: number, syncDays: GithubSyncDay[]): any {
   const byWeekDay = new Map<string, GithubSyncDay>();
+  const bySequence = new Map<number, GithubSyncDay>();
   for (const day of syncDays) byWeekDay.set(`${day.weekNumber}:${day.dayNumber}`, day);
+  for (const day of syncDays) {
+    if (typeof day.sequence === "number") bySequence.set(day.sequence, day);
+  }
 
   const applyToMonth = (monthNode: any) => {
     if (!monthNode || typeof monthNode !== "object") return;
 
     if (Array.isArray(monthNode.introduction_plan)) {
+      let seq = 0;
       for (const weekNode of monthNode.introduction_plan) {
         if (!weekNode || typeof weekNode !== "object" || !Array.isArray(weekNode.days)) continue;
         const weekNo = Number(weekNode.week);
         for (const dayNode of weekNode.days) {
           if (!dayNode || typeof dayNode !== "object") continue;
           const dayNo = Number(dayNode.day);
-          const syncDay = byWeekDay.get(`${weekNo}:${dayNo}`);
+          const syncDay = bySequence.get(seq) ?? byWeekDay.get(`${weekNo}:${dayNo}`);
+          seq += 1;
           if (!syncDay) continue;
           if (syncDay.morning) {
             dayNode.morning = { product: syncDay.morning.product, amount_grams: syncDay.morning.amountGrams };
@@ -198,13 +206,15 @@ function mergeMonthData(root: any, month: number, syncDays: GithubSyncDay[]): an
     }
 
     if (Array.isArray(monthNode.weekly_schedule)) {
+      let seq = 0;
       for (const weekNode of monthNode.weekly_schedule) {
         if (!weekNode || typeof weekNode !== "object" || !Array.isArray(weekNode.days)) continue;
         const weekNo = Number(weekNode.week);
         for (const dayNode of weekNode.days) {
           if (!dayNode || typeof dayNode !== "object") continue;
           const dayNo = Number(dayNode.day);
-          const syncDay = byWeekDay.get(`${weekNo}:${dayNo}`);
+          const syncDay = bySequence.get(seq) ?? byWeekDay.get(`${weekNo}:${dayNo}`);
+          seq += 1;
           if (!syncDay) continue;
           if (syncDay.time !== undefined) dayNode.time = syncDay.time;
           if (syncDay.foodType !== undefined) dayNode.food_type = syncDay.foodType;
@@ -278,7 +288,7 @@ export function mapPlanDaysToGithubSyncDays(
   for (const [_, list] of byWeek) {
     list.sort((a, b) => a.date.localeCompare(b.date)).forEach((d, idx) => dayNumberById.set(d.id, idx + 1));
   }
-  return sorted.map((day) => {
+  return sorted.map((day, sequence) => {
     const amountTxt = amountTextById[day.id] ?? String(day.amountGrams);
     const amountParsed = parseInt(amountTxt || "0", 10);
     const subsTxt = subsTextById[day.id] ?? day.substitutions.join(", ");
@@ -288,6 +298,7 @@ export function mapPlanDaysToGithubSyncDays(
     const eveningFoods = splitCsv(parsedMeta.eveningFood);
     const eveningAmounts = splitCsv(parsedMeta.eveningAmount);
     return {
+      sequence,
       weekNumber: day.weekNumber,
       dayNumber: dayNumberById.get(day.id) ?? 1,
       morning: {
@@ -320,20 +331,26 @@ export async function syncMonthToGithub(params: {
   days: GithubSyncDay[];
   message: string;
 }): Promise<GithubSyncResult> {
-  const token = GITHUB_TOKEN;
-  const owner = GITHUB_OWNER;
-  const repo = GITHUB_REPO;
-  const branch = GITHUB_BRANCH;
-  const path = GITHUB_DATA_JSON_PATH;
-  const apiBase = GITHUB_API_BASE;
+  const token = (await loadGithubToken()).trim();
+  const owner = GITHUB_OWNER.trim();
+  const repo = GITHUB_REPO.trim();
+  const branch = GITHUB_BRANCH.trim();
+  const path = GITHUB_DATA_JSON_PATH.trim();
+  const apiBase = GITHUB_API_BASE.trim();
 
-  if (!token || !owner || !repo) {
+  const missingRequired: string[] = [];
+  if (!token) missingRequired.push("GITHUB_TOKEN");
+  if (!owner) missingRequired.push("GITHUB_OWNER");
+  if (!repo) missingRequired.push("GITHUB_REPO");
+
+  if (missingRequired.length > 0) {
     return {
       ok: false,
       text:
         `Missing config.\n` +
-        `Need: GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO in src/remoteFeed/env.ts\n` +
-        `Optional: GITHUB_BRANCH, GITHUB_DATA_JSON_PATH, GITHUB_API_BASE`,
+        `Need: ${missingRequired.join(", ")} in Settings\n` +
+        `Open Settings and set GitHub token`,
+      errorCode: "missing_config",
     };
   }
 

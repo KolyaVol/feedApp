@@ -12,6 +12,7 @@ export const KEYS = {
   IS_DEVELOPER: "@feed/is_developer",
   REMOTE_FEED_CACHE: "@feed/remote_feed_cache",
   REMOTE_FEED_START_DATE: "@feed/remote_feed_start_date",
+  GITHUB_TOKEN: "@feed/github_token",
   PROGRESS_DATE: "@feed/progress_date",
   USER_OVERLAY: "@feed/user_overlay",
 } as const;

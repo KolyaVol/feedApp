@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import type { DayPlan, PlanDay, LoadedSchedule } from "../types";
@@ -31,6 +31,7 @@ import {
   setEatenProduct,
   setReplacementMeal,
   setReplacementMealsBulk,
+  clearReplacementMeals,
   toggleMealEaten,
 } from "../data/userOverlay";
 
@@ -223,6 +224,7 @@ function publishProgressDate(value: string) {
 
 export function useSchedule() {
   const remote = useRemoteFeedContext();
+  const remoteRefreshRef = useRef<(() => Promise<void>) | null>(null);
   const [planDays, setPlanDaysState] = useState<PlanDay[]>([]);
   const [schedules, setSchedules] = useState<LoadedSchedule[]>([]);
   const [userOverlay, setUserOverlay] = useState<Awaited<ReturnType<typeof getUserOverlay>> | null>(null);
@@ -233,6 +235,10 @@ export function useSchedule() {
     sharedProgressDateStr = today;
     return today;
   });
+
+  useEffect(() => {
+    remoteRefreshRef.current = remote?.refresh ?? null;
+  }, [remote?.refresh]);
 
   useEffect(() => {
     const listener = (value: string) => setProgressDateStr(value);
@@ -419,6 +425,7 @@ export function useSchedule() {
       getPlanDays(),
       getLoadedSchedules(),
       getUserOverlay(),
+      remoteRefreshRef.current?.().catch(() => undefined),
     ]);
     setPlanDaysState(days);
     setSchedules(scheds);
@@ -688,6 +695,11 @@ export function useSchedule() {
     [refresh],
   );
 
+  const clearReplacementOverlay = useCallback(async (): Promise<void> => {
+    await clearReplacementMeals();
+    await refresh();
+  }, [refresh]);
+
   return {
     planDays: effectivePlanDays,
     schedules: effectiveSchedules,
@@ -719,5 +731,6 @@ export function useSchedule() {
     revertShiftAtSlot,
     replaceShiftedMealAtSlot,
     replaceMealsBulk,
+    clearReplacementOverlay,
   };
 }

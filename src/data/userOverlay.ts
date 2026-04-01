@@ -197,6 +197,17 @@ export async function setReplacementMealsBulk(
   return next;
 }
 
+export async function clearReplacementMeals(): Promise<UserOverlayState> {
+  const state = await getUserOverlay();
+  const next: UserOverlayState = {
+    ...state,
+    replacementsByDate: {},
+    updatedAt: nowIso(),
+  };
+  await setUserOverlay(next);
+  return next;
+}
+
 export async function setEatenProduct(product: string): Promise<UserOverlayState> {
   const state = await getUserOverlay();
   const key = normalizeProductKey(product);

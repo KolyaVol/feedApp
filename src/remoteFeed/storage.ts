@@ -62,3 +62,25 @@ export async function setStartDate(dateStr: string): Promise<void> {
   }
 }
 
+export async function loadGithubToken(): Promise<string> {
+  try {
+    const stored = await AsyncStorage.getItem(KEYS.GITHUB_TOKEN);
+    return typeof stored === "string" ? stored.trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+export async function setGithubToken(token: string): Promise<void> {
+  const normalized = token.trim();
+  try {
+    if (normalized) {
+      await AsyncStorage.setItem(KEYS.GITHUB_TOKEN, normalized);
+      return;
+    }
+    await AsyncStorage.removeItem(KEYS.GITHUB_TOKEN);
+  } catch {
+    // ignore
+  }
+}
+

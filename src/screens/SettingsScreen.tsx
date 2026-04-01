@@ -17,6 +17,7 @@ import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLocale } from "../contexts/LocaleContext";
 import { useReminders } from "../hooks/useReminders";
+import { useSchedule } from "../hooks/useSchedule";
 import { usePreferences } from "../contexts/PreferencesContext";
 import { timeToDate, dateToTime } from "../utils/date";
 import {
@@ -27,14 +28,18 @@ import {
 } from "../notifications/schedule";
 import type { Reminder, MealType } from "../types";
 import { spacing } from "../theme";
+import { loadGithubToken, setGithubToken } from "../remoteFeed/storage";
+import { useRemoteFeedContext } from "../remoteFeed/RemoteFeedContext";
 
 export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const g = useGlobalStyles();
   const { t, locale, setLocale } = useLocale();
   const { theme, setTheme, colors } = useTheme();
+  const remote = useRemoteFeedContext();
   const isDark = theme === "dark";
   const styles = useLocalStyles(colors);
+  const { refresh: refreshSchedule, clearReplacementOverlay } = useSchedule();
 
   const { hideSubstitutions, setHideSubstitutions, isDeveloper, setIsDeveloper } = usePreferences();
   const {
@@ -50,6 +55,9 @@ export function SettingsScreen() {
   const [time, setTime] = useState(() => new Date());
   const [linkedMealType, setLinkedMealType] = useState<MealType | undefined>(undefined);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [githubTokenDraft, setGithubTokenDraft] = useState("");
+  const [githubTokenSaved, setGithubTokenSaved] = useState("");
+  const [syncingMain, setSyncingMain] = useState(false);
 
   useEffect(() => {
     requestPermissions();
@@ -57,6 +65,13 @@ export function SettingsScreen() {
       await updateReminderState(id, { notificationId });
     }).then(() => refreshReminders());
   }, [refreshReminders, updateReminderState]);
+
+  useEffect(() => {
+    loadGithubToken().then((token) => {
+      setGithubTokenDraft(token);
+      setGithubTokenSaved(token);
+    });
+  }, []);
 
   const openAdd = () => {
     setEditing(null);
@@ -145,6 +160,38 @@ export function SettingsScreen() {
         await updateReminderState(item.id, { notificationId: notifId });
     } else {
       await updateReminderState(item.id, { notificationId: undefined });
+    }
+  };
+
+  const saveGithubToken = async () => {
+    await setGithubToken(githubTokenDraft);
+    const normalized = githubTokenDraft.trim();
+    setGithubTokenDraft(normalized);
+    setGithubTokenSaved(normalized);
+    Alert.alert(t("settingsGithubToken"), t("settingsGithubTokenSaved"));
+  };
+
+  const clearGithubToken = async () => {
+    await setGithubToken("");
+    setGithubTokenDraft("");
+    setGithubTokenSaved("");
+    Alert.alert(t("settingsGithubToken"), t("settingsGithubTokenCleared"));
+  };
+
+  const syncMainFromGithub = async () => {
+    if (syncingMain) return;
+    setSyncingMain(true);
+    try {
+      if (remote?.refresh) {
+        await remote.refresh();
+      }
+      await clearReplacementOverlay();
+      await refreshSchedule();
+      Alert.alert(t("settingsTitle"), t("mainSyncGithubSuccess"));
+    } catch {
+      Alert.alert(t("settingsTitle"), t("mainSyncGithubError"));
+    } finally {
+      setSyncingMain(false);
     }
   };
 
@@ -246,6 +293,45 @@ export function SettingsScreen() {
           onValueChange={setIsDeveloper}
           trackColor={{ false: colors.switchTrack, true: colors.primary }}
         />
+      </View>
+
+      <View style={[styles.section, { marginTop: 12 }]}>
+        <Text style={g.titleSection}>{t("settingsGithubToken")}</Text>
+        <Text style={[g.subtitle, { marginBottom: 8 }]}>{t("settingsGithubTokenSubtitle")}</Text>
+        <TextInput
+          style={[g.input, g.inputWithMargin]}
+          value={githubTokenDraft}
+          onChangeText={setGithubTokenDraft}
+          placeholder={t("settingsGithubTokenPlaceholder")}
+          placeholderTextColor={colors.placeholder}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <View style={styles.githubTokenButtons}>
+          <TouchableOpacity
+            style={[g.saveBtn, githubTokenDraft.trim() === githubTokenSaved && g.buttonDisabled]}
+            disabled={githubTokenDraft.trim() === githubTokenSaved}
+            onPress={saveGithubToken}
+          >
+            <Text style={g.saveBtnText}>{t("settingsGithubTokenSave")}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[g.cancelBtn, !githubTokenSaved && g.buttonDisabled]}
+            disabled={!githubTokenSaved}
+            onPress={clearGithubToken}
+          >
+            <Text style={g.cancelBtnText}>{t("settingsGithubTokenClear")}</Text>
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity
+          style={[g.primaryButtonOutline, styles.sectionBtn, syncingMain && g.buttonDisabled]}
+          disabled={syncingMain}
+          onPress={syncMainFromGithub}
+        >
+          <Text style={g.primaryButtonOutlineText}>
+            {syncingMain ? t("mainSyncGithubLoading") : t("mainSyncGithubButton")}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.section}>
@@ -389,6 +475,7 @@ function useLocalStyles(colors: { borderLight: string }) {
         timeLabel: { marginRight: 12 },
         linkMealWrap: { marginBottom: 20, gap: 8 },
         linkMealRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+        githubTokenButtons: { flexDirection: "row", gap: 10 },
         linkMealBtn: {
           borderWidth: 1,
           borderRadius: 8,

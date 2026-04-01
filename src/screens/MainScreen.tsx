@@ -127,23 +127,18 @@ export function MainScreen() {
     const dayPlan = remoteDayPlans.find((d) => d.date === progressDateStr);
     const displaced = displacedByDate[progressDateStr] ?? {};
     const order = { morning: 0, lunch: 1, evening: 2 } as const;
-    const normal = [...(dayPlan?.meals ?? [])]
-      .map((meal) => ({
-        type: meal.mealType,
-        items: [{ product: meal.product, amount_grams: meal.amountGrams }],
-        time: undefined as string | undefined,
-        skeleton: false,
-      }))
-      .sort((a, b) => order[a.type] - order[b.type]);
-    const skeletons = (["morning", "lunch", "evening"] as const)
-      .filter((type) => !!displaced[type])
-      .map((type) => ({
+    const grouped = (["morning", "lunch", "evening"] as const).map((type) => {
+      const items = (dayPlan?.meals ?? [])
+        .filter((meal) => meal.mealType === type)
+        .map((meal) => ({ product: meal.product, amount_grams: meal.amountGrams }));
+      return {
         type,
-        items: [] as Array<{ product: string; amount_grams: number }>,
+        items,
         time: undefined as string | undefined,
-        skeleton: true,
-      }));
-    return [...normal, ...skeletons].sort((a, b) => order[a.type] - order[b.type]);
+        skeleton: items.length === 0 && !!displaced[type],
+      };
+    });
+    return grouped.sort((a, b) => order[a.type] - order[b.type]);
   }, [displacedByDate, progressDateStr, remoteDayPlans]);
 
   const mealLabel = useCallback(
@@ -254,6 +249,9 @@ export function MainScreen() {
           const meals = day.meals.map((m) =>
             m.mealType === item.mealType ? { ...m, product: item.product, amountGrams: item.amountGrams } : m,
           );
+          if (!meals.some((m) => m.mealType === item.mealType)) {
+            meals.push({ mealType: item.mealType, product: item.product, amountGrams: item.amountGrams });
+          }
           const morning = meals.find((m) => m.mealType === "morning");
           const lunch = meals.filter((m) => m.mealType === "lunch");
           const evening = meals.filter((m) => m.mealType === "evening");
@@ -420,9 +418,9 @@ export function MainScreen() {
       ) : null}
 
       {orderedMeals.length ? (
-        orderedMeals.map((meal, index) => (
+        orderedMeals.map((meal) => (
           <View
-            key={`${meal.type}-${meal.items.map((x) => x.product).join("+")}-${index}`}
+            key={meal.type}
             style={[
               styles.mainCard,
               meal.skeleton && { backgroundColor: colors.pastelOrange, borderWidth: 1, borderColor: colors.border },
@@ -434,11 +432,19 @@ export function MainScreen() {
             ]}
           >
             <Text style={styles.foodTypeLabel}>{mealLabel(meal.type)}</Text>
-            <Text style={styles.foodName}>
-              {meal.skeleton ? t("mainShiftSkeletonTitle") : meal.items.map((x) => x.product).join(" + ")}
-            </Text>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnShift, { borderColor: colors.border, marginBottom: 10 }]}
+              onPress={() => openReplaceModal(meal.type)}
+            >
+              <Text style={styles.actionBtnText}>{t("mainAddExtraProduct")}</Text>
+            </TouchableOpacity>
+            {meal.items.length ? (
+              <Text style={styles.foodName}>{meal.items.map((x) => x.product).join(" + ")}</Text>
+            ) : (
+              <Text style={styles.emptyMealText}>{meal.skeleton ? t("mainShiftSkeletonTitle") : t("mainMealSlotEmpty")}</Text>
+            )}
             <View style={styles.detailsRow}>
-              {!meal.skeleton ? (
+              {meal.items.length ? (
                 <View style={styles.detailBadge}>
                   <Text style={styles.detailBadgeText}>
                     {meal.items.reduce((s, x) => s + x.amount_grams, 0)}
@@ -478,6 +484,13 @@ export function MainScreen() {
                     <Text style={styles.actionBtnText}>{t("mainShiftReplace")}</Text>
                   </TouchableOpacity>
                 </>
+              ) : !meal.items.length ? (
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.actionBtnEaten]}
+                  onPress={() => openReplaceModal(meal.type)}
+                >
+                  <Text style={styles.actionBtnText}>{t("mainShiftReplace")}</Text>
+                </TouchableOpacity>
               ) : (
                 <>
                   <TouchableOpacity
@@ -964,6 +977,13 @@ function useLocalStyles(colors: {
         },
         emptyHint: {
           marginTop: 8,
+          textAlign: "center",
+        },
+        emptyMealText: {
+          fontSize: 16,
+          color: colors.textMuted,
+          fontFamily: fonts.medium,
+          marginBottom: 14,
           textAlign: "center",
         },
         toast: {
