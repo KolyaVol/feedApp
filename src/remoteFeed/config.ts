@@ -1,4 +1,4 @@
-export const REMOTE_FEED_URL =
-  process.env.EXPO_PUBLIC_REMOTE_FEED_URL ??
-  "https://raw.githubusercontent.com/KolyaVol/feedData/master/data.json";
+import { REMOTE_FEED_URL as CONFIG_REMOTE_FEED_URL } from "./env";
+
+export const REMOTE_FEED_URL = CONFIG_REMOTE_FEED_URL;
 

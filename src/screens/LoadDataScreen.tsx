@@ -22,6 +22,7 @@ import { usePreferences } from "../contexts/PreferencesContext";
 import { useRemoteFeedContext } from "../remoteFeed/RemoteFeedContext";
 import { parseRemoteJsonText } from "../remoteFeed/api";
 import { mapPlanDaysToGithubSyncDays, parseMealMeta, syncMonthToGithub } from "../remoteFeed/githubSync";
+import { GITHUB_BRANCH, GITHUB_DATA_JSON_PATH, GITHUB_OWNER, GITHUB_REPO } from "../remoteFeed/env";
 import { fonts, spacing } from "../theme";
 import type { LoadedSchedule, PlanDay } from "../types";
 import { addDays, addPlanDays, formatDateStr, updatePlanDay as updatePlanDayStorage } from "../data/planDays";
@@ -178,14 +179,6 @@ function toBase64Utf8(text: string): string | null {
 function jsonString(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
-
-function readEnv(name: string): string | undefined {
-  const v = (process.env as any)?.[name] as unknown;
-  if (typeof v !== "string") return undefined;
-  const trimmed = v.trim();
-  return trimmed ? trimmed : undefined;
-}
-
 
 function normalizeDraftDays(days: PlanDay[], amountTextById: Record<string, string>, subsTextById: Record<string, string>): PlanDay[] {
   return days.map((d) => {
@@ -370,10 +363,10 @@ export function LoadDataScreen() {
     const payload = {
       message: "Update schedule",
       content: contentBase64 ?? "",
-      owner: readEnv("EXPO_PUBLIC_GITHUB_OWNER") ?? readEnv("GITHUB_OWNER") ?? "",
-      repo: readEnv("EXPO_PUBLIC_GITHUB_REPO") ?? readEnv("GITHUB_REPO") ?? "",
-      branch: readEnv("EXPO_PUBLIC_GITHUB_BRANCH") ?? readEnv("GITHUB_BRANCH") ?? "main",
-      path: readEnv("EXPO_PUBLIC_GITHUB_DATA_JSON_PATH") ?? readEnv("GITHUB_DATA_JSON_PATH") ?? "data.json",
+      owner: GITHUB_OWNER,
+      repo: GITHUB_REPO,
+      branch: GITHUB_BRANCH,
+      path: GITHUB_DATA_JSON_PATH,
     };
     setPayloadText(
       jsonString({
@@ -670,9 +663,8 @@ export function LoadDataScreen() {
                 const lunchExisting = mealFromDay(remoteDay, "lunch");
                 const eveningExisting = mealFromDay(remoteDay, "evening");
                 const parsedMeta = parseMealMeta(d.notes);
-                const morningFoodValue = morningRemote?.product ?? d.food;
-                const morningAmountValue = morningRemote?.amountGrams ?? d.amountGrams;
-                const morningAmountText = morningRemote ? String(morningAmountValue) : amountText;
+                const morningFoodValue = d.food;
+                const morningAmountText = amountText;
                 const morningAmountParsed = parseInt(morningAmountText, 10);
                 const morningAmountBad = !morningAmountText.trim() || isNaN(morningAmountParsed) || morningAmountParsed < 0;
                 const mealMeta: MealDraftMeta = {
@@ -682,7 +674,7 @@ export function LoadDataScreen() {
                   eveningFood: parsedMeta.eveningFood || eveningExisting.product,
                   eveningAmount: parsedMeta.eveningAmount || eveningExisting.amount,
                 };
-                const hasBreakfast = !!(morningFoodValue || morningAmountText.trim());
+                const hasBreakfast = !!(morningFoodValue || morningAmountText.trim() || morningRemote?.product || morningRemote?.amountGrams);
                 const hasLunch = !!(mealMeta.lunchFood || mealMeta.lunchAmount);
                 const hasEvening = !!(mealMeta.eveningFood || mealMeta.eveningAmount);
                 const lunchRows = mealRows(mealMeta.lunchFood, mealMeta.lunchAmount);

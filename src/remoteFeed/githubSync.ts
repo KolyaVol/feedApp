@@ -1,4 +1,12 @@
 import type { PlanDay } from "../types";
+import {
+  GITHUB_API_BASE,
+  GITHUB_BRANCH,
+  GITHUB_DATA_JSON_PATH,
+  GITHUB_OWNER,
+  GITHUB_REPO,
+  GITHUB_TOKEN,
+} from "./env";
 
 export type GithubSyncMeal = { product: string; amountGrams: number };
 
@@ -70,13 +78,6 @@ function fromBase64Utf8(base64: string): string | null {
 
 function jsonString(value: unknown) {
   return JSON.stringify(value, null, 2);
-}
-
-function readEnv(name: string): string | undefined {
-  const v = (process.env as any)?.[name] as unknown;
-  if (typeof v !== "string") return undefined;
-  const trimmed = v.trim();
-  return trimmed ? trimmed : undefined;
 }
 
 function githubPathEncode(path: string): string {
@@ -319,20 +320,20 @@ export async function syncMonthToGithub(params: {
   days: GithubSyncDay[];
   message: string;
 }): Promise<GithubSyncResult> {
-  const token = readEnv("EXPO_PUBLIC_GITHUB_TOKEN") ?? readEnv("GITHUB_TOKEN");
-  const owner = readEnv("EXPO_PUBLIC_GITHUB_OWNER") ?? readEnv("GITHUB_OWNER");
-  const repo = readEnv("EXPO_PUBLIC_GITHUB_REPO") ?? readEnv("GITHUB_REPO");
-  const branch = readEnv("EXPO_PUBLIC_GITHUB_BRANCH") ?? readEnv("GITHUB_BRANCH") ?? "main";
-  const path = readEnv("EXPO_PUBLIC_GITHUB_DATA_JSON_PATH") ?? readEnv("GITHUB_DATA_JSON_PATH") ?? "data.json";
-  const apiBase = readEnv("EXPO_PUBLIC_GITHUB_API_BASE") ?? readEnv("GITHUB_API_BASE") ?? "https://api.github.com";
+  const token = GITHUB_TOKEN;
+  const owner = GITHUB_OWNER;
+  const repo = GITHUB_REPO;
+  const branch = GITHUB_BRANCH;
+  const path = GITHUB_DATA_JSON_PATH;
+  const apiBase = GITHUB_API_BASE;
 
   if (!token || !owner || !repo) {
     return {
       ok: false,
       text:
-        `Missing env.\n` +
-        `Need: EXPO_PUBLIC_GITHUB_TOKEN, EXPO_PUBLIC_GITHUB_OWNER, EXPO_PUBLIC_GITHUB_REPO\n` +
-        `Optional: EXPO_PUBLIC_GITHUB_BRANCH, EXPO_PUBLIC_GITHUB_DATA_JSON_PATH, EXPO_PUBLIC_GITHUB_API_BASE`,
+        `Missing config.\n` +
+        `Need: GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO in src/remoteFeed/env.ts\n` +
+        `Optional: GITHUB_BRANCH, GITHUB_DATA_JSON_PATH, GITHUB_API_BASE`,
     };
   }
 

@@ -33,6 +33,7 @@ yarn-error.*
 # local env files
 .env*.local
 .env
+src/remoteFeed/envPrivate.ts
 
 # typescript
 *.tsbuildinfo
