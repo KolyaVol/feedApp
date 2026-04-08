@@ -15,4 +15,5 @@ export const KEYS = {
   GITHUB_TOKEN: "@feed/github_token",
   PROGRESS_DATE: "@feed/progress_date",
   USER_OVERLAY: "@feed/user_overlay",
+  LAST_BASELINE_SYNC_AT: "@feed/last_baseline_sync_at",
 } as const;

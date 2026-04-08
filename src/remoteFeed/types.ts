@@ -52,7 +52,17 @@ export interface RemoteFeedSchedule {
     fruits?: string[];
     meat?: string[];
   };
+  skipped?: SkippedProductStack[];
   months?: RemoteFeedSchedule[];
+}
+
+export interface SkippedProductStack {
+  id: string;
+  originalProduct: string;
+  previousProducts: string[];
+  currentProduct: string;
+  currentAmountGrams: number;
+  updatedAt: string;
 }
 
 export interface RemoteFeedMeal {

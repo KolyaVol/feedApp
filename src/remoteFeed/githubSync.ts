@@ -1,8 +1,10 @@
 import type { PlanDay } from "../types";
+import type { SkippedProductStack } from "./types";
 import {
   GITHUB_API_BASE,
   GITHUB_BRANCH,
   GITHUB_DATA_JSON_PATH,
+  GITHUB_USER_JSON_PATH,
   GITHUB_OWNER,
   GITHUB_REPO,
 } from "./env";
@@ -123,6 +125,25 @@ async function readGithubContentsSha(opts: {
   return { sha: typeof sha === "string" ? sha : undefined, text, notFound: false };
 }
 
+export async function readGithubJsonFile(path: string): Promise<{ ok: boolean; text?: string; notFound?: boolean; message?: string }> {
+  const token = (await loadGithubToken()).trim();
+  const owner = GITHUB_OWNER.trim();
+  const repo = GITHUB_REPO.trim();
+  const branch = GITHUB_BRANCH.trim();
+  const apiBase = GITHUB_API_BASE.trim();
+  if (!token || !owner || !repo) {
+    return { ok: false, message: "Missing GitHub credentials in settings." };
+  }
+  try {
+    const current = await readGithubContentsSha({ apiBase, owner, repo, branch, path, token });
+    if (current.notFound) return { ok: false, notFound: true, message: "File not found on GitHub." };
+    if (!current.text) return { ok: false, message: "GitHub file is empty." };
+    return { ok: true, text: current.text };
+  } catch (error) {
+    return { ok: false, message: String((error as any)?.message ?? error) };
+  }
+}
+
 async function putGithubContents(opts: {
   apiBase: string;
   owner: string;
@@ -162,6 +183,43 @@ async function putGithubContents(opts: {
   const commitSha = typeof json?.commit?.sha === "string" ? json.commit.sha : undefined;
   const commitUrl = typeof json?.commit?.html_url === "string" ? json.commit.html_url : undefined;
   return { commitSha, commitUrl };
+}
+
+export async function writeGithubJsonFile(params: { path: string; text: string; message: string }): Promise<{ ok: boolean; text: string; commitUrl?: string; commitSha?: string }> {
+  const token = (await loadGithubToken()).trim();
+  const owner = GITHUB_OWNER.trim();
+  const repo = GITHUB_REPO.trim();
+  const branch = GITHUB_BRANCH.trim();
+  const apiBase = GITHUB_API_BASE.trim();
+  if (!token || !owner || !repo) {
+    return { ok: false, text: "Missing GitHub credentials in settings." };
+  }
+  const contentBase64 = toBase64Utf8(params.text);
+  if (!contentBase64) return { ok: false, text: "Base64 encoding unavailable." };
+  try {
+    const current = await readGithubContentsSha({
+      apiBase,
+      owner,
+      repo,
+      branch,
+      path: params.path,
+      token,
+    });
+    const put = await putGithubContents({
+      apiBase,
+      owner,
+      repo,
+      branch,
+      path: params.path,
+      token,
+      message: params.message,
+      contentBase64,
+      sha: current.notFound ? undefined : current.sha,
+    });
+    return { ok: true, text: "Saved", commitSha: put.commitSha, commitUrl: put.commitUrl };
+  } catch (error) {
+    return { ok: false, text: String((error as any)?.message ?? error) };
+  }
 }
 
 function isGithubConflictError(error: unknown): boolean {
@@ -235,6 +293,89 @@ function mergeMonthData(root: any, month: number, syncDays: GithubSyncDay[]): an
     applyToMonth(nextRoot);
   }
   return nextRoot;
+}
+
+function normalizeProduct(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function safeProduct(value: string): string {
+  return value.trim();
+}
+
+export function upsertSkippedStack(
+  current: SkippedProductStack[] | undefined,
+  params: {
+    originalProduct: string;
+    nextProduct: string;
+    nextAmountGrams: number;
+  },
+): SkippedProductStack[] {
+  const originalProduct = safeProduct(params.originalProduct);
+  const nextProduct = safeProduct(params.nextProduct);
+  if (!originalProduct || !nextProduct) return current ?? [];
+  const safeAmount = Number.isFinite(params.nextAmountGrams) ? Math.max(0, Math.trunc(params.nextAmountGrams)) : 0;
+  const now = new Date().toISOString();
+  const list = Array.isArray(current) ? [...current] : [];
+  const idx = list.findIndex((x) => normalizeProduct(x.originalProduct) === normalizeProduct(originalProduct));
+
+  if (idx < 0) {
+    return [
+      ...list,
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        originalProduct,
+        previousProducts: [originalProduct],
+        currentProduct: nextProduct,
+        currentAmountGrams: safeAmount,
+        updatedAt: now,
+      },
+    ];
+  }
+
+  const stack = list[idx]!;
+  const nextPrev = [...(Array.isArray(stack.previousProducts) ? stack.previousProducts : []), safeProduct(stack.currentProduct)]
+    .filter(Boolean)
+    .slice(-5);
+  list[idx] = {
+    ...stack,
+    originalProduct,
+    previousProducts: nextPrev.length ? nextPrev : [originalProduct],
+    currentProduct: nextProduct,
+    currentAmountGrams: safeAmount,
+    updatedAt: now,
+  };
+  return list;
+}
+
+export function appendMissingMonths(rootUser: any, rootBaseline: any): any {
+  const userMonths: any[] = Array.isArray(rootUser?.months)
+    ? rootUser.months
+    : rootUser && typeof rootUser === "object"
+      ? [rootUser]
+      : [];
+  const baselineMonths: any[] = Array.isArray(rootBaseline?.months)
+    ? rootBaseline.months
+    : rootBaseline && typeof rootBaseline === "object"
+      ? [rootBaseline]
+      : [];
+  const existing = new Set(
+    userMonths.map((m) => Number(m?.month)).filter((m) => Number.isFinite(m)),
+  );
+  const toAppend = baselineMonths.filter((m) => {
+    const month = Number(m?.month);
+    return Number.isFinite(month) && !existing.has(month);
+  });
+  if (!toAppend.length) return rootUser;
+  const next = JSON.parse(JSON.stringify(rootUser));
+  if (Array.isArray(next?.months)) {
+    next.months = [...next.months, ...toAppend].sort((a, b) => Number(a?.month) - Number(b?.month));
+    return next;
+  }
+  const nextMonths = [...userMonths, ...toAppend].sort((a, b) => Number(a?.month) - Number(b?.month));
+  if (!nextMonths.length) return next;
+  const latest = nextMonths[nextMonths.length - 1];
+  return { ...latest, months: nextMonths };
 }
 
 type MealDraftMeta = { notes: string; lunchFood: string; lunchAmount: string; eveningFood: string; eveningAmount: string };
@@ -330,12 +471,13 @@ export async function syncMonthToGithub(params: {
   month: number;
   days: GithubSyncDay[];
   message: string;
+  skipped?: SkippedProductStack[];
 }): Promise<GithubSyncResult> {
   const token = (await loadGithubToken()).trim();
   const owner = GITHUB_OWNER.trim();
   const repo = GITHUB_REPO.trim();
   const branch = GITHUB_BRANCH.trim();
-  const path = GITHUB_DATA_JSON_PATH.trim();
+  const path = GITHUB_USER_JSON_PATH.trim();
   const apiBase = GITHUB_API_BASE.trim();
 
   const missingRequired: string[] = [];
@@ -364,6 +506,9 @@ export async function syncMonthToGithub(params: {
       return { ok: false, text: "Current GitHub JSON is invalid and cannot be merged safely." };
     }
     const merged = mergeMonthData(rootJson, params.month, params.days);
+    if (params.skipped) {
+      merged.skipped = params.skipped;
+    }
     const mergedText = jsonString(merged);
     const contentBase64 = toBase64Utf8(mergedText);
     if (!contentBase64) return { ok: false, text: "Base64 encoding is unavailable (globalThis.btoa missing)." };
@@ -411,4 +556,25 @@ export async function syncMonthToGithub(params: {
   } catch (error) {
     return { ok: false, text: String((error as any)?.message ?? error) };
   }
+}
+
+export async function resetUserJsonFromBaseline(): Promise<GithubSyncResult> {
+  const baselinePath = GITHUB_DATA_JSON_PATH.trim();
+  const userPath = GITHUB_USER_JSON_PATH.trim();
+  const baseline = await readGithubJsonFile(baselinePath);
+  if (!baseline.ok || !baseline.text) {
+    return { ok: false, text: baseline.message ?? "Failed to read baseline data.json." };
+  }
+  const saved = await writeGithubJsonFile({
+    path: userPath,
+    text: baseline.text,
+    message: `Reset ${userPath} from ${baselinePath}`,
+  });
+  return {
+    ok: saved.ok,
+    text: saved.text,
+    scheduleText: saved.ok ? baseline.text : undefined,
+    commitSha: saved.commitSha,
+    commitUrl: saved.commitUrl,
+  };
 }

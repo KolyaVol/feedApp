@@ -24,9 +24,15 @@ export const GITHUB_OWNER = "KolyaVol";
 export const GITHUB_REPO = "feedData";
 export const GITHUB_BRANCH = "master";
 export const GITHUB_DATA_JSON_PATH = "data.json";
+export const GITHUB_USER_JSON_PATH = "user.json";
+export const GITHUB_BASELINE_JSON_PATH = GITHUB_DATA_JSON_PATH;
 
-export const REMOTE_FEED_URL = pickValue(
+export const REMOTE_FEED_BASELINE_URL = pickValue(
   privateEnv.REMOTE_FEED_URL,
   typeof process !== "undefined" && process?.env ? process.env.EXPO_PUBLIC_REMOTE_FEED_URL : undefined,
   "https://raw.githubusercontent.com/KolyaVol/feedData/master/data.json",
 );
+
+export const REMOTE_FEED_USER_URL = REMOTE_FEED_BASELINE_URL.replace(/\/data\.json(\?|$)/, "/user.json$1");
+
+export const REMOTE_FEED_URL = REMOTE_FEED_USER_URL;

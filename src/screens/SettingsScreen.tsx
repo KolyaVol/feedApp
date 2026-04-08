@@ -195,6 +195,34 @@ export function SettingsScreen() {
     }
   };
 
+  const resetFromBaseline = () => {
+    Alert.alert(
+      t("settingsResetDataTitle"),
+      t("settingsResetDataMessage"),
+      [
+        { text: t("remindersCancel"), style: "cancel" },
+        {
+          text: t("settingsResetDataConfirm"),
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const ok = await remote?.resetFromBaseline?.();
+              if (!ok) {
+                Alert.alert(t("settingsTitle"), t("settingsResetDataError"));
+                return;
+              }
+              await clearReplacementOverlay();
+              await refreshSchedule();
+              Alert.alert(t("settingsTitle"), t("settingsResetDataSuccess"));
+            } catch {
+              Alert.alert(t("settingsTitle"), t("settingsResetDataError"));
+            }
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <ScrollView
       style={g.screenContainer}
@@ -299,13 +327,14 @@ export function SettingsScreen() {
         <Text style={g.titleSection}>{t("settingsGithubToken")}</Text>
         <Text style={[g.subtitle, { marginBottom: 8 }]}>{t("settingsGithubTokenSubtitle")}</Text>
         <TextInput
-          style={[g.input, g.inputWithMargin]}
+          style={[g.input, g.inputWithMargin, { color: colors.text, backgroundColor: colors.card }]}
           value={githubTokenDraft}
           onChangeText={setGithubTokenDraft}
           placeholder={t("settingsGithubTokenPlaceholder")}
           placeholderTextColor={colors.placeholder}
           autoCapitalize="none"
           autoCorrect={false}
+          selectionColor={colors.primary}
         />
         <View style={styles.githubTokenButtons}>
           <TouchableOpacity
@@ -331,6 +360,12 @@ export function SettingsScreen() {
           <Text style={g.primaryButtonOutlineText}>
             {syncingMain ? t("mainSyncGithubLoading") : t("mainSyncGithubButton")}
           </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[g.cancelBtn, styles.sectionBtn]}
+          onPress={resetFromBaseline}
+        >
+          <Text style={g.cancelBtnText}>{t("settingsResetDataButton")}</Text>
         </TouchableOpacity>
       </View>
 

@@ -22,6 +22,9 @@ import { useLocale } from "../contexts/LocaleContext";
 import { usePreferences } from "../contexts/PreferencesContext";
 import { dateToTime, timeToDate } from "../utils/date";
 import { syncMonthToGithub } from "../remoteFeed/githubSync";
+import { upsertSkippedStack } from "../remoteFeed/githubSync";
+import { useRemoteFeedContext } from "../remoteFeed/RemoteFeedContext";
+import type { SkippedProductStack } from "../remoteFeed/types";
 
 export function MainScreen() {
   const insets = useSafeAreaInsets();
@@ -29,6 +32,7 @@ export function MainScreen() {
   const { t, locale } = useLocale();
   const { colors } = useTheme();
   const { hideSubstitutions } = usePreferences();
+  const remote = useRemoteFeedContext();
   const styles = useLocalStyles(colors);
   const {
     schedules,
@@ -72,6 +76,8 @@ export function MainScreen() {
   const [replaceAmountText, setReplaceAmountText] = React.useState("0");
   const [replacing, setReplacing] = React.useState(false);
   const [replaceInStreak, setReplaceInStreak] = React.useState(false);
+  const [skippedModalVisible, setSkippedModalVisible] = React.useState(false);
+  const [selectedSkippedStackId, setSelectedSkippedStackId] = React.useState<string | null>(null);
   const [syncToast, setSyncToast] = React.useState<{ kind: "success" | "error"; text: string } | null>(null);
 
   const allSeenProducts = useMemo(() => {
@@ -94,6 +100,16 @@ export function MainScreen() {
   }, [isProductEaten, locale, planDays, remoteDayPlans]);
 
   const replaceProductIsEaten = useMemo(() => isProductEaten(replaceProduct), [isProductEaten, replaceProduct]);
+  const skippedStacks = useMemo(() => remote?.schedule?.skipped ?? [], [remote?.schedule?.skipped]);
+
+  const skippedLevelColor = useMemo(() => {
+    const count = skippedStacks.length;
+    if (count <= 0) return colors.chipBg;
+    if (count === 1) return colors.pastelGreen;
+    if (count === 2) return colors.pastelYellow;
+    if (count === 3) return colors.pastelOrange;
+    return colors.pastelRed;
+  }, [colors, skippedStacks.length]);
 
   useFocusEffect(
     useCallback(() => {
@@ -198,18 +214,19 @@ export function MainScreen() {
     if (!replaceProduct.trim() || !Number.isFinite(amount) || amount < 0) return;
     setReplacing(true);
     const replacementsForSync: Array<{ date: string; mealType: "morning" | "lunch" | "evening"; product: string; amountGrams: number }> = [];
+    let nextSkippedStacks: SkippedProductStack[] | undefined;
     if (replaceInStreak && !replaceProductIsEaten) {
       const day = remoteDayPlans.find((d) => d.date === progressDateStr);
       const meal = day?.meals.find((m) => m.mealType === replaceMealType);
       const originalProduct = meal?.product?.trim();
       if (originalProduct) {
-        const items: Array<{ date: string; mealType: typeof replaceMealType; product: string; amountGrams: number }> = [];
+        const items: Array<{ date: string; mealType: "morning" | "lunch" | "evening"; product: string; amountGrams: number }> = [];
         for (const d of remoteDayPlans) {
           if (d.date < progressDateStr) continue;
-          const m = d.meals.find((x) => x.mealType === replaceMealType);
-          if (!m) continue;
-          if (m.product.trim() !== originalProduct) continue;
-          items.push({ date: d.date, mealType: replaceMealType, product: replaceProduct, amountGrams: m.amountGrams });
+          for (const m of d.meals) {
+            if (m.product.trim() !== originalProduct) continue;
+            items.push({ date: d.date, mealType: m.mealType, product: replaceProduct, amountGrams: m.amountGrams });
+          }
         }
         if (items.length) {
           items[0] = { ...items[0], amountGrams: amount };
@@ -219,6 +236,11 @@ export function MainScreen() {
           await replaceShiftedMealAtSlot(progressDateStr, replaceMealType, replaceProduct, amount);
           replacementsForSync.push({ date: progressDateStr, mealType: replaceMealType, product: replaceProduct, amountGrams: amount });
         }
+        nextSkippedStacks = upsertSkippedStack(skippedStacks, {
+          originalProduct,
+          nextProduct: replaceProduct,
+          nextAmountGrams: amount,
+        });
       } else {
         await replaceShiftedMealAtSlot(progressDateStr, replaceMealType, replaceProduct, amount);
         replacementsForSync.push({ date: progressDateStr, mealType: replaceMealType, product: replaceProduct, amountGrams: amount });
@@ -270,6 +292,7 @@ export function MainScreen() {
         month,
         days,
         message: `Replace ${replaceMealType} on ${progressDateStr}`,
+        skipped: nextSkippedStacks,
       });
       if (!result.ok) {
         failed = true;
@@ -279,8 +302,10 @@ export function MainScreen() {
     }
     if (!failed && byMonth.size > 0) {
       setSyncToast({ kind: "success", text: "Replacements synced to GitHub" });
+      await remote?.refresh();
     }
   }, [
+    remote,
     progressDateStr,
     replaceAmountText,
     replaceInStreak,
@@ -290,6 +315,7 @@ export function MainScreen() {
     replaceProductIsEaten,
     replaceShiftedMealAtSlot,
     remoteDayPlans,
+    skippedStacks,
   ]);
 
   useEffect(() => {
@@ -297,6 +323,97 @@ export function MainScreen() {
     const timer = setTimeout(() => setSyncToast(null), 2600);
     return () => clearTimeout(timer);
   }, [syncToast]);
+
+  const selectedSkippedStack = useMemo(
+    () => skippedStacks.find((x) => x.id === selectedSkippedStackId) ?? null,
+    [selectedSkippedStackId, skippedStacks],
+  );
+
+  const applySelectedSkippedStack = useCallback(async () => {
+    if (!selectedSkippedStack) return;
+    const items: Array<{ date: string; mealType: "morning" | "lunch" | "evening"; product: string; amountGrams: number }> = [];
+    for (const d of remoteDayPlans) {
+      if (d.date < progressDateStr) continue;
+      for (const m of d.meals) {
+        if (m.product.trim().toLowerCase() !== selectedSkippedStack.originalProduct.trim().toLowerCase()) continue;
+        items.push({
+          date: d.date,
+          mealType: m.mealType,
+          product: selectedSkippedStack.currentProduct,
+          amountGrams: selectedSkippedStack.currentAmountGrams,
+        });
+      }
+    }
+    if (!items.length) {
+      setSyncToast({ kind: "error", text: t("mainSkippedNoTargets") });
+      return;
+    }
+    await replaceMealsBulk(items);
+
+    const uniqueByDate = new Map<string, { date: string; mealType: "morning" | "lunch" | "evening"; product: string; amountGrams: number }>();
+    for (const item of items) uniqueByDate.set(`${item.date}:${item.mealType}`, item);
+    const byMonth = new Map<number, Array<{ date: string; mealType: "morning" | "lunch" | "evening"; product: string; amountGrams: number }>>();
+    for (const item of uniqueByDate.values()) {
+      const day = remoteDayPlans.find((d) => d.date === item.date);
+      if (!day) continue;
+      const list = byMonth.get(day.sourceMonth) ?? [];
+      list.push(item);
+      byMonth.set(day.sourceMonth, list);
+    }
+    for (const [month, monthItems] of byMonth) {
+      const days = monthItems
+        .map((item) => {
+          const day = remoteDayPlans.find((d) => d.date === item.date);
+          if (!day) return null;
+          const meals = day.meals.map((m) =>
+            m.mealType === item.mealType ? { ...m, product: item.product, amountGrams: item.amountGrams } : m,
+          );
+          if (!meals.some((m) => m.mealType === item.mealType)) {
+            meals.push({ mealType: item.mealType, product: item.product, amountGrams: item.amountGrams });
+          }
+          const morning = meals.find((m) => m.mealType === "morning");
+          const lunch = meals.filter((m) => m.mealType === "lunch");
+          const evening = meals.filter((m) => m.mealType === "evening");
+          return {
+            weekNumber: day.weekNumber,
+            dayNumber: day.dayNumber,
+            morning: morning ? { product: morning.product, amountGrams: morning.amountGrams } : undefined,
+            lunch: lunch.map((m) => ({ product: m.product, amountGrams: m.amountGrams })),
+            evening: evening.map((m) => ({ product: m.product, amountGrams: m.amountGrams })),
+            notes: day.notes ?? "",
+          };
+        })
+        .filter(Boolean);
+      if (!days.length) continue;
+      const result = await syncMonthToGithub({
+        month,
+        days,
+        message: `Apply skipped stack ${selectedSkippedStack.originalProduct}`,
+        skipped: skippedStacks,
+      });
+      if (!result.ok) {
+        setSyncToast({ kind: "error", text: `GitHub sync failed: ${result.text}` });
+        return;
+      }
+    }
+    setSkippedModalVisible(false);
+    setSyncToast({ kind: "success", text: t("mainSkippedApplied") });
+    await remote?.refresh();
+  }, [progressDateStr, remote, remoteDayPlans, replaceMealsBulk, selectedSkippedStack, skippedStacks, t]);
+
+  const skipAgainFromStack = useCallback(() => {
+    if (!selectedSkippedStack) return;
+    const day = remoteDayPlans.find((d) => d.date === progressDateStr);
+    const meal = day?.meals.find(
+      (m) => m.product.trim().toLowerCase() === selectedSkippedStack.originalProduct.trim().toLowerCase(),
+    );
+    setReplaceMealType(meal?.mealType ?? "morning");
+    setReplaceProduct(selectedSkippedStack.currentProduct);
+    setReplaceAmountText(String(selectedSkippedStack.currentAmountGrams));
+    setReplaceInStreak(true);
+    setSkippedModalVisible(false);
+    setReplaceModalVisible(true);
+  }, [progressDateStr, remoteDayPlans, selectedSkippedStack]);
 
   const todayStr = useMemo(() => {
     const now = new Date(progressDateStr + "T00:00:00");
@@ -392,9 +509,18 @@ export function MainScreen() {
 
   return (
     <ScrollView style={g.screenContainer} contentContainerStyle={g.screenContent}>
-      <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>
-        {t("mainScreenTitle")}
-      </Text>
+      <View style={[styles.topRow, { paddingTop: insets.top + 8 }]}>
+        <Text style={g.screenTitle}>{t("mainScreenTitle")}</Text>
+        <TouchableOpacity
+          style={[styles.skippedFab, { backgroundColor: skippedLevelColor }]}
+          onPress={() => {
+            setSelectedSkippedStackId(skippedStacks[0]?.id ?? null);
+            setSkippedModalVisible(true);
+          }}
+        >
+          <Text style={styles.skippedFabText}>{skippedStacks.length}</Text>
+        </TouchableOpacity>
+      </View>
       <Text style={styles.dateHeader}>{todayHeader}</Text>
 
       {daysRemainingAlert ? (
@@ -767,6 +893,51 @@ export function MainScreen() {
           </View>
         </View>
       </Modal>
+      <Modal visible={skippedModalVisible} animationType="slide" transparent>
+        <View style={g.modalOverlay}>
+          <View style={g.modal}>
+            <Text style={g.modalTitle}>{t("mainSkippedTitle")}</Text>
+            <ScrollView style={{ maxHeight: 260, marginTop: 10 }}>
+              <View style={styles.actionsRow}>
+                {skippedStacks.length ? (
+                  skippedStacks.map((stack) => {
+                    const selected = selectedSkippedStackId === stack.id;
+                    return (
+                      <TouchableOpacity
+                        key={stack.id}
+                        style={[styles.skippedCard, selected && { borderColor: colors.primary }]}
+                        onPress={() => setSelectedSkippedStackId(stack.id)}
+                      >
+                        <Text style={styles.skippedCardTitle}>{stack.originalProduct}</Text>
+                        <Text style={styles.skippedCardText}>
+                          {t("mainSkippedCurrent")}: {stack.currentProduct} · {stack.currentAmountGrams}
+                          {t("mainGrams")}
+                        </Text>
+                        <Text style={styles.skippedCardText}>
+                          {t("mainSkippedPrev")}: {stack.previousProducts.join(" -> ")}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })
+                ) : (
+                  <Text style={styles.emptyMealText}>{t("mainSkippedEmpty")}</Text>
+                )}
+              </View>
+            </ScrollView>
+            <View style={[g.modalButtons, { marginTop: 12 }]}>
+              <TouchableOpacity style={g.cancelBtn} onPress={() => setSkippedModalVisible(false)}>
+                <Text style={g.cancelBtnText}>{t("remindersCancel")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={g.saveBtn} onPress={skipAgainFromStack} disabled={!selectedSkippedStack}>
+                <Text style={g.saveBtnText}>{t("mainSkippedSkipAgain")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={g.saveBtn} onPress={applySelectedSkippedStack} disabled={!selectedSkippedStack}>
+                <Text style={g.saveBtnText}>{t("mainSkippedApply")}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       {syncToast ? (
         <View
           style={[
@@ -800,6 +971,12 @@ function useLocalStyles(colors: {
     () =>
       StyleSheet.create({
         center: { flex: 1, justifyContent: "center", alignItems: "center" },
+        topRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: spacing.screenPadding,
+        },
         dateHeader: {
           fontSize: 15,
           color: colors.textMuted,
@@ -998,6 +1175,37 @@ function useLocalStyles(colors: {
           fontSize: 13,
           fontFamily: fonts.medium,
           textAlign: "center",
+        },
+        skippedFab: {
+          width: 34,
+          height: 34,
+          borderRadius: 17,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        skippedFabText: {
+          fontSize: 14,
+          fontFamily: fonts.bold,
+          color: colors.text,
+        },
+        skippedCard: {
+          backgroundColor: colors.chipBg,
+          borderRadius: spacing.radiusMd,
+          padding: 10,
+          borderWidth: 1,
+          borderColor: colors.border,
+        },
+        skippedCardTitle: {
+          fontSize: 14,
+          fontFamily: fonts.semiBold,
+          color: colors.text,
+          textTransform: "capitalize",
+        },
+        skippedCardText: {
+          marginTop: 4,
+          fontSize: 13,
+          fontFamily: fonts.regular,
+          color: colors.textMuted,
         },
       }),
     [colors],

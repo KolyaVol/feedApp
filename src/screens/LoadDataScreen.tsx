@@ -22,7 +22,7 @@ import { usePreferences } from "../contexts/PreferencesContext";
 import { useRemoteFeedContext } from "../remoteFeed/RemoteFeedContext";
 import { parseRemoteJsonText } from "../remoteFeed/api";
 import { mapPlanDaysToGithubSyncDays, parseMealMeta, syncMonthToGithub } from "../remoteFeed/githubSync";
-import { GITHUB_BRANCH, GITHUB_DATA_JSON_PATH, GITHUB_OWNER, GITHUB_REPO } from "../remoteFeed/env";
+import { GITHUB_BRANCH, GITHUB_OWNER, GITHUB_REPO, GITHUB_USER_JSON_PATH } from "../remoteFeed/env";
 import { fonts, spacing } from "../theme";
 import type { LoadedSchedule, PlanDay } from "../types";
 import { addDays, addPlanDays, formatDateStr, updatePlanDay as updatePlanDayStorage } from "../data/planDays";
@@ -372,7 +372,7 @@ export function LoadDataScreen() {
       owner: GITHUB_OWNER,
       repo: GITHUB_REPO,
       branch: GITHUB_BRANCH,
-      path: GITHUB_DATA_JSON_PATH,
+      path: GITHUB_USER_JSON_PATH,
     };
     setPayloadText(
       jsonString({
