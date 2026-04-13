@@ -2,7 +2,6 @@ import React, { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as NavigationBar from "expo-navigation-bar";
 import { useFonts } from "expo-font";
-import * as DevClient from "expo-dev-client";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -14,59 +13,44 @@ import {
   Nunito_700Bold,
 } from "@expo-google-fonts/nunito";
 import { MainScreen } from "./src/screens/MainScreen";
+import { DataScreen } from "./src/screens/DataScreen";
 import { StatisticsScreen } from "./src/screens/StatisticsScreen";
-import { LoadDataScreen } from "./src/screens/LoadDataScreen";
-import { CalculatorScreen } from "./src/screens/CalculatorScreen";
+import { BestPracticesScreen } from "./src/screens/BestPracticesScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ThemeProvider, useTheme } from "./src/contexts/ThemeContext";
 import { LocaleProvider, useLocale } from "./src/contexts/LocaleContext";
-import { PreferencesProvider } from "./src/contexts/PreferencesContext";
-import { RemoteFeedProvider } from "./src/remoteFeed/RemoteFeedContext";
 import { fonts } from "./src/theme";
 import type { RootTabParamList } from "./src/navigation/types";
 import type { TranslationKey } from "./src/i18n/en";
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 
+const TAB_ICONS: Record<keyof RootTabParamList, string> = {
+  Home: "🏠",
+  Data: "📊",
+  Stats: "📈",
+  Guide: "📖",
+  Settings: "⚙️",
+};
+
 const TAB_CONFIG: {
   name: keyof RootTabParamList;
   labelKey: TranslationKey;
-  titleKey: TranslationKey;
   component: React.ComponentType<any>;
 }[] = [
-  { name: "Home", labelKey: "tabsHome", titleKey: "screenTitlesBabyFeed", component: MainScreen },
-  {
-    name: "Stats",
-    labelKey: "tabsStats",
-    titleKey: "screenTitlesStatistics",
-    component: StatisticsScreen,
-  },
-  {
-    name: "LoadData",
-    labelKey: "tabsData",
-    titleKey: "screenTitlesLoadData",
-    component: LoadDataScreen,
-  },
-  {
-    name: "Calculator",
-    labelKey: "tabsCalc",
-    titleKey: "screenTitlesCalculator",
-    component: CalculatorScreen,
-  },
-  {
-    name: "Settings",
-    labelKey: "tabsSettings",
-    titleKey: "settingsTitle",
-    component: SettingsScreen,
-  },
+  { name: "Home", labelKey: "tabHome", component: MainScreen },
+  { name: "Data", labelKey: "tabData", component: DataScreen },
+  { name: "Stats", labelKey: "tabStats", component: StatisticsScreen },
+  { name: "Guide", labelKey: "tabGuide", component: BestPracticesScreen },
+  { name: "Settings", labelKey: "tabSettings", component: SettingsScreen },
 ];
 
 function TabIcon({
-  label,
+  icon,
   focused,
   colors,
 }: {
-  label: string;
+  icon: string;
   focused: boolean;
   colors: { primary: string; textEmpty: string };
 }) {
@@ -74,13 +58,11 @@ function TabIcon({
     <View style={{ alignItems: "center", justifyContent: "center" }}>
       <Text
         style={{
-          fontSize: 16,
-          color: focused ? colors.primary : colors.textEmpty,
-          fontWeight: "600",
-          fontFamily: fonts.semiBold,
+          fontSize: 18,
+          opacity: focused ? 1 : 0.5,
         }}
       >
-        {label[0]}
+        {icon}
       </Text>
     </View>
   );
@@ -102,19 +84,27 @@ function AppTabs() {
             paddingBottom: 10,
             paddingTop: 8,
           },
-          tabBarLabelStyle: { fontSize: 12, marginTop: 4, paddingBottom: 4 },
+          tabBarLabelStyle: {
+            fontSize: 12,
+            marginTop: 2,
+            paddingBottom: 4,
+            fontFamily: fonts.medium,
+          },
         }}
       >
-        {TAB_CONFIG.map(({ name, labelKey, titleKey, component }) => (
+        {TAB_CONFIG.map(({ name, labelKey, component }) => (
           <Tab.Screen
             key={name}
             name={name}
             component={component}
             options={{
-              title: t(titleKey),
               tabBarLabel: t(labelKey),
               tabBarIcon: ({ focused }) => (
-                <TabIcon label={t(labelKey)} focused={focused} colors={colors} />
+                <TabIcon
+                  icon={TAB_ICONS[name]}
+                  focused={focused}
+                  colors={colors}
+                />
               ),
             }}
           />
@@ -134,15 +124,7 @@ export default function App() {
   });
 
   useEffect(() => {
-    if (__DEV__ && Platform.OS !== "web") {
-      DevClient.hideMenu();
-    }
-  }, []);
-
-  useEffect(() => {
-    if (Platform.OS !== "android") {
-      return;
-    }
+    if (Platform.OS !== "android") return;
 
     const applyAndroidNavBarMode = async () => {
       try {
@@ -152,21 +134,17 @@ export default function App() {
 
     void applyAndroidNavBarMode();
 
-    const appStateSubscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        void applyAndroidNavBarMode();
-      }
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void applyAndroidNavBarMode();
     });
 
-    const visibilitySubscription = NavigationBar.addVisibilityListener(({ visibility }) => {
-      if (visibility === "visible") {
-        void NavigationBar.setVisibilityAsync("hidden");
-      }
+    const visSub = NavigationBar.addVisibilityListener(({ visibility }) => {
+      if (visibility === "visible") void NavigationBar.setVisibilityAsync("hidden");
     });
 
     return () => {
-      appStateSubscription.remove();
-      visibilitySubscription.remove();
+      appStateSub.remove();
+      visSub.remove();
     };
   }, []);
 
@@ -176,13 +154,9 @@ export default function App() {
     <SafeAreaProvider>
       <LocaleProvider>
         <ThemeProvider>
-          <PreferencesProvider>
-            <RemoteFeedProvider>
-              <NavigationContainer>
-                <AppTabs />
-              </NavigationContainer>
-            </RemoteFeedProvider>
-          </PreferencesProvider>
+          <NavigationContainer>
+            <AppTabs />
+          </NavigationContainer>
         </ThemeProvider>
       </LocaleProvider>
     </SafeAreaProvider>

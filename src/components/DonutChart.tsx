@@ -9,9 +9,10 @@ import { fonts } from "../theme";
 interface DonutChartProps {
   data: AggregatedFood[];
   centerLabel?: string;
+  unit?: string;
 }
 
-export function DonutChart({ data, centerLabel }: DonutChartProps) {
+export function DonutChart({ data, centerLabel, unit = "g" }: DonutChartProps) {
   const { width } = useWindowDimensions();
   const g = useGlobalStyles();
   const { colors } = useTheme();
@@ -66,6 +67,7 @@ export function DonutChart({ data, centerLabel }: DonutChartProps) {
           fontSize: 14,
           color: colors.text,
           fontFamily: fonts.medium,
+          textTransform: "capitalize",
         },
       }),
     [colors, centerHoleSize],
@@ -103,10 +105,10 @@ export function DonutChart({ data, centerLabel }: DonutChartProps) {
       </View>
       <View style={styles.legendRow}>
         {data.map((item) => (
-          <View key={item.foodTypeId} style={styles.legendItem}>
+          <View key={item.name} style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: item.color }]} />
             <Text style={styles.legendText}>
-              {item.name} {item.amount} {item.unit}
+              {item.name} {item.amount}{unit}
             </Text>
           </View>
         ))}

@@ -1,521 +1,281 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
-  TextInput,
-  Switch,
   ScrollView,
-  TouchableOpacity,
   StyleSheet,
-  Modal,
+  TouchableOpacity,
+  TextInput,
   Alert,
-  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import { File, Paths } from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import * as DocumentPicker from "expo-document-picker";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
-import { useLocale } from "../contexts/LocaleContext";
-import { useReminders } from "../hooks/useReminders";
-import { useSchedule } from "../hooks/useSchedule";
-import { usePreferences } from "../contexts/PreferencesContext";
-import { timeToDate, dateToTime } from "../utils/date";
+import { useLocale, type Locale } from "../contexts/LocaleContext";
+import { fonts, spacing } from "../theme";
 import {
-  requestPermissions,
-  scheduleReminder,
-  cancelScheduledNotification,
-  rescheduleAllReminders,
-} from "../notifications/schedule";
-import type { Reminder, MealType } from "../types";
-import { spacing } from "../theme";
-import { loadGithubToken, setGithubToken } from "../remoteFeed/storage";
-import { useRemoteFeedContext } from "../remoteFeed/RemoteFeedContext";
+  getGithubToken,
+  setGithubToken as saveGithubToken,
+  getLastSyncAt,
+} from "../data/settings";
+import { getFeedDays, setFeedDays } from "../data/feedDays";
+import type { FeedDay } from "../types";
 
 export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const g = useGlobalStyles();
   const { t, locale, setLocale } = useLocale();
   const { theme, setTheme, colors } = useTheme();
-  const remote = useRemoteFeedContext();
-  const isDark = theme === "dark";
-  const styles = useLocalStyles(colors);
-  const { refresh: refreshSchedule, clearReplacementOverlay } = useSchedule();
+  const s = useStyles(colors);
 
-  const { hideSubstitutions, setHideSubstitutions, isDeveloper, setIsDeveloper } = usePreferences();
-  const {
-    reminders,
-    addReminder,
-    updateReminder: updateReminderState,
-    deleteReminder,
-    refresh: refreshReminders,
-  } = useReminders();
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editing, setEditing] = useState<Reminder | null>(null);
-  const [title, setTitle] = useState("");
-  const [time, setTime] = useState(() => new Date());
-  const [linkedMealType, setLinkedMealType] = useState<MealType | undefined>(undefined);
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [githubTokenDraft, setGithubTokenDraft] = useState("");
-  const [githubTokenSaved, setGithubTokenSaved] = useState("");
-  const [syncingMain, setSyncingMain] = useState(false);
+  const [githubToken, setGithubToken] = useState("");
+  const [lastSync, setLastSync] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    requestPermissions();
-    rescheduleAllReminders(async (id, notificationId) => {
-      await updateReminderState(id, { notificationId });
-    }).then(() => refreshReminders());
-  }, [refreshReminders, updateReminderState]);
-
-  useEffect(() => {
-    loadGithubToken().then((token) => {
-      setGithubTokenDraft(token);
-      setGithubTokenSaved(token);
-    });
+    getGithubToken().then(setGithubToken);
+    getLastSyncAt().then(setLastSync);
   }, []);
 
-  const openAdd = () => {
-    setEditing(null);
-    setTitle("");
-    setTime(new Date());
-    setLinkedMealType(undefined);
-    setModalVisible(true);
-  };
+  const showToast = useCallback((text: string) => {
+    setToast(text);
+    setTimeout(() => setToast(null), 2500);
+  }, []);
 
-  const openEdit = (item: Reminder) => {
-    setEditing(item);
-    setTitle(item.title);
-    setTime(timeToDate(item.time));
-    setLinkedMealType(item.linkedMealType);
-    setModalVisible(true);
-  };
+  const handleSaveToken = useCallback(async () => {
+    await saveGithubToken(githubToken);
+    showToast(t("settingsSaved"));
+  }, [githubToken, showToast, t]);
 
-  const getTitleFromLinkedMeal = (mealType: MealType | undefined): string => {
-    if (mealType === "morning") return t("mealBreakfast");
-    if (mealType === "lunch") return t("mealLunch");
-    if (mealType === "evening") return t("mealEvening");
-    return "";
-  };
-
-  const save = async () => {
-    const trimmed = title.trim();
-    const fallbackTitle = getTitleFromLinkedMeal(linkedMealType);
-    const finalTitle = trimmed || fallbackTitle;
-    if (!finalTitle) return;
-    const timeStr = dateToTime(time);
-    if (editing) {
-      if (editing.notificationId)
-        await cancelScheduledNotification(editing.notificationId);
-      const notifId = await scheduleReminder({
-        ...editing,
-        title: finalTitle,
-        time: timeStr,
-        linkedMealType,
-      });
-      await updateReminderState(editing.id, {
-        title: finalTitle,
-        time: timeStr,
-        linkedMealType,
-        notificationId: notifId ?? undefined,
-      });
-    } else {
-      const added = await addReminder({
-        title: finalTitle,
-        time: timeStr,
-        enabled: true,
-        linkedMealType,
-      });
-      const notifId = await scheduleReminder(added);
-      if (notifId)
-        await updateReminderState(added.id, { notificationId: notifId });
-    }
-    setModalVisible(false);
-  };
-
-  const removeReminder = (item: Reminder) => {
-    Alert.alert(
-      t("remindersDeleteConfirmTitle"),
-      t("remindersDeleteConfirmMessage", { name: item.title }),
-      [
-        { text: t("remindersCancel"), style: "cancel" },
-        {
-          text: t("remindersDelete"),
-          style: "destructive",
-          onPress: async () => {
-            if (item.notificationId)
-              await cancelScheduledNotification(item.notificationId);
-            await deleteReminder(item.id);
-          },
-        },
-      ],
-    );
-  };
-
-  const onToggleEnabled = async (item: Reminder, enabled: boolean) => {
-    if (item.notificationId && !enabled)
-      await cancelScheduledNotification(item.notificationId);
-    await updateReminderState(item.id, { enabled });
-    if (enabled) {
-      const notifId = await scheduleReminder({ ...item, enabled: true });
-      if (notifId)
-        await updateReminderState(item.id, { notificationId: notifId });
-    } else {
-      await updateReminderState(item.id, { notificationId: undefined });
-    }
-  };
-
-  const saveGithubToken = async () => {
-    await setGithubToken(githubTokenDraft);
-    const normalized = githubTokenDraft.trim();
-    setGithubTokenDraft(normalized);
-    setGithubTokenSaved(normalized);
-    Alert.alert(t("settingsGithubToken"), t("settingsGithubTokenSaved"));
-  };
-
-  const clearGithubToken = async () => {
-    await setGithubToken("");
-    setGithubTokenDraft("");
-    setGithubTokenSaved("");
-    Alert.alert(t("settingsGithubToken"), t("settingsGithubTokenCleared"));
-  };
-
-  const syncMainFromGithub = async () => {
-    if (syncingMain) return;
-    setSyncingMain(true);
+  const handleExport = useCallback(async () => {
     try {
-      if (remote?.refresh) {
-        await remote.refresh();
-      }
-      await clearReplacementOverlay();
-      await refreshSchedule();
-      Alert.alert(t("settingsTitle"), t("mainSyncGithubSuccess"));
-    } catch {
-      Alert.alert(t("settingsTitle"), t("mainSyncGithubError"));
-    } finally {
-      setSyncingMain(false);
+      const days = await getFeedDays();
+      const json = JSON.stringify(days, null, 2);
+      const file = new File(Paths.cache, "feed-data.json");
+      file.write(json);
+      await Sharing.shareAsync(file.uri, { mimeType: "application/json" });
+      showToast(t("settingsExportSuccess"));
+    } catch (e: any) {
+      Alert.alert(t("error"), e?.message ?? "Export failed");
     }
-  };
+  }, [showToast, t]);
 
-  const resetFromBaseline = () => {
-    Alert.alert(
-      t("settingsResetDataTitle"),
-      t("settingsResetDataMessage"),
-      [
-        { text: t("remindersCancel"), style: "cancel" },
-        {
-          text: t("settingsResetDataConfirm"),
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const ok = await remote?.resetFromBaseline?.();
-              if (!ok) {
-                Alert.alert(t("settingsTitle"), t("settingsResetDataError"));
-                return;
-              }
-              await clearReplacementOverlay();
-              await refreshSchedule();
-              Alert.alert(t("settingsTitle"), t("settingsResetDataSuccess"));
-            } catch {
-              Alert.alert(t("settingsTitle"), t("settingsResetDataError"));
-            }
-          },
-        },
-      ],
-    );
-  };
+  const handleImport = useCallback(async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "application/json",
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const uri = result.assets[0]!.uri;
+      const importedFile = new File(uri);
+      const content = await importedFile.text();
+      const parsed = JSON.parse(content) as unknown;
+      if (!Array.isArray(parsed)) {
+        Alert.alert(t("error"), t("settingsImportError"));
+        return;
+      }
+      const days = parsed as FeedDay[];
+      await setFeedDays(days);
+      showToast(t("settingsImportSuccess", { count: days.length }));
+    } catch (e: any) {
+      Alert.alert(t("error"), e?.message ?? t("settingsImportError"));
+    }
+  }, [showToast, t]);
 
   return (
-    <ScrollView
-      style={g.screenContainer}
-      contentContainerStyle={g.screenContent}
-    >
+    <ScrollView style={g.screenContainer} contentContainerStyle={g.screenContent}>
       <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>
-        {t("settingsTitle")}
+        {t("titleSettings")}
       </Text>
 
-      <View style={[g.cardRow, { marginHorizontal: 16 }]}>
-        <View style={g.rowText}>
-          <Text style={g.titleCard}>{t("settingsLanguage")}</Text>
-          <Text style={g.subtitle}>
-            {t("settingsEnglish")} / {t("settingsRussian")}
-          </Text>
-        </View>
-        <View style={{ flexDirection: "row", gap: 8 }}>
+      {/* Theme */}
+      <View style={[s.card, { backgroundColor: colors.card }]}>
+        <Text style={[s.cardLabel, { color: colors.textMuted }]}>{t("settingsTheme")}</Text>
+        <View style={s.chipRow}>
           <TouchableOpacity
-            onPress={() => setLocale("en")}
-            style={{
-              paddingVertical: 6,
-              paddingHorizontal: 12,
-              borderRadius: 8,
-              backgroundColor:
-                locale === "en" ? colors.primary : colors.switchTrack,
-            }}
+            style={[
+              s.chip,
+              { backgroundColor: theme === "light" ? colors.primary : colors.chipBg },
+            ]}
+            onPress={() => setTheme("light")}
           >
             <Text
-              style={[
-                g.textBody,
-                {
-                  fontWeight: "600",
-                  color: locale === "en" ? "#fff" : colors.text,
-                },
-              ]}
+              style={[s.chipText, { color: theme === "light" ? "#fff" : colors.text }]}
             >
-              {t("settingsEnglish")}
+              {t("settingsThemeLight")}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => setLocale("ru")}
-            style={{
-              paddingVertical: 6,
-              paddingHorizontal: 12,
-              borderRadius: 8,
-              backgroundColor:
-                locale === "ru" ? colors.primary : colors.switchTrack,
-            }}
+            style={[
+              s.chip,
+              { backgroundColor: theme === "dark" ? colors.primary : colors.chipBg },
+            ]}
+            onPress={() => setTheme("dark")}
           >
             <Text
-              style={[
-                g.textBody,
-                {
-                  fontWeight: "600",
-                  color: locale === "ru" ? "#fff" : colors.text,
-                },
-              ]}
+              style={[s.chipText, { color: theme === "dark" ? "#fff" : colors.text }]}
             >
-              {t("settingsRussian")}
+              {t("settingsThemeDark")}
             </Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      <View style={[g.cardRow, { marginHorizontal: 16 }]}>
-        <View style={g.rowText}>
-          <Text style={g.titleCard}>{t("settingsDarkTheme")}</Text>
-          <Text style={g.subtitle}>{t("settingsDarkThemeSubtitle")}</Text>
+      {/* Language */}
+      <View style={[s.card, { backgroundColor: colors.card }]}>
+        <Text style={[s.cardLabel, { color: colors.textMuted }]}>{t("settingsLanguage")}</Text>
+        <View style={s.chipRow}>
+          <TouchableOpacity
+            style={[
+              s.chip,
+              { backgroundColor: locale === "en" ? colors.primary : colors.chipBg },
+            ]}
+            onPress={() => setLocale("en" as Locale)}
+          >
+            <Text style={[s.chipText, { color: locale === "en" ? "#fff" : colors.text }]}>
+              English
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              s.chip,
+              { backgroundColor: locale === "ru" ? colors.primary : colors.chipBg },
+            ]}
+            onPress={() => setLocale("ru" as Locale)}
+          >
+            <Text style={[s.chipText, { color: locale === "ru" ? "#fff" : colors.text }]}>
+              Русский
+            </Text>
+          </TouchableOpacity>
         </View>
-        <Switch
-          value={isDark}
-          onValueChange={(v) => setTheme(v ? "dark" : "light")}
-          trackColor={{ false: colors.switchTrack, true: colors.primary }}
-        />
       </View>
 
-      <View style={[g.cardRow, { marginHorizontal: 16 }]}>
-        <View style={g.rowText}>
-          <Text style={g.titleCard}>{t("settingsHideSubstitutions")}</Text>
-          <Text style={g.subtitle}>{t("settingsHideSubstitutionsSubtitle")}</Text>
-        </View>
-        <Switch
-          value={hideSubstitutions}
-          onValueChange={setHideSubstitutions}
-          trackColor={{ false: colors.switchTrack, true: colors.primary }}
-        />
-      </View>
-
-      <View style={[g.cardRow, { marginHorizontal: 16 }]}>
-        <View style={g.rowText}>
-          <Text style={g.titleCard}>{t("settingsDeveloperMode")}</Text>
-          <Text style={g.subtitle}>{t("settingsDeveloperModeSubtitle")}</Text>
-        </View>
-        <Switch
-          value={isDeveloper}
-          onValueChange={setIsDeveloper}
-          trackColor={{ false: colors.switchTrack, true: colors.primary }}
-        />
-      </View>
-
-      <View style={[styles.section, { marginTop: 12 }]}>
-        <Text style={g.titleSection}>{t("settingsGithubToken")}</Text>
-        <Text style={[g.subtitle, { marginBottom: 8 }]}>{t("settingsGithubTokenSubtitle")}</Text>
+      {/* GitHub token */}
+      <View style={[s.card, { backgroundColor: colors.card }]}>
+        <Text style={[s.cardLabel, { color: colors.textMuted }]}>{t("settingsGithubToken")}</Text>
         <TextInput
-          style={[g.input, g.inputWithMargin, { color: colors.text, backgroundColor: colors.card }]}
-          value={githubTokenDraft}
-          onChangeText={setGithubTokenDraft}
+          style={[g.input, { color: colors.text, marginBottom: 10 }]}
+          value={githubToken}
+          onChangeText={setGithubToken}
           placeholder={t("settingsGithubTokenPlaceholder")}
           placeholderTextColor={colors.placeholder}
+          secureTextEntry
           autoCapitalize="none"
           autoCorrect={false}
-          selectionColor={colors.primary}
         />
-        <View style={styles.githubTokenButtons}>
-          <TouchableOpacity
-            style={[g.saveBtn, githubTokenDraft.trim() === githubTokenSaved && g.buttonDisabled]}
-            disabled={githubTokenDraft.trim() === githubTokenSaved}
-            onPress={saveGithubToken}
-          >
-            <Text style={g.saveBtnText}>{t("settingsGithubTokenSave")}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[g.cancelBtn, !githubTokenSaved && g.buttonDisabled]}
-            disabled={!githubTokenSaved}
-            onPress={clearGithubToken}
-          >
-            <Text style={g.cancelBtnText}>{t("settingsGithubTokenClear")}</Text>
-          </TouchableOpacity>
-        </View>
         <TouchableOpacity
-          style={[g.primaryButtonOutline, styles.sectionBtn, syncingMain && g.buttonDisabled]}
-          disabled={syncingMain}
-          onPress={syncMainFromGithub}
+          style={[s.saveBtn, { backgroundColor: colors.primary }]}
+          onPress={handleSaveToken}
         >
-          <Text style={g.primaryButtonOutlineText}>
-            {syncingMain ? t("mainSyncGithubLoading") : t("mainSyncGithubButton")}
-          </Text>
+          <Text style={s.saveBtnText}>{t("save")}</Text>
+        </TouchableOpacity>
+        <Text style={[s.syncInfo, { color: colors.textMuted }]}>
+          {t("settingsLastSync")}: {lastSync ? new Date(lastSync).toLocaleString() : t("settingsNeverSynced")}
+        </Text>
+      </View>
+
+      {/* Export / Import */}
+      <View style={[s.card, { backgroundColor: colors.card }]}>
+        <TouchableOpacity
+          style={[s.actionBtn, { backgroundColor: colors.chipBg }]}
+          onPress={handleExport}
+        >
+          <Text style={[s.actionBtnText, { color: colors.text }]}>{t("settingsExport")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[g.cancelBtn, styles.sectionBtn]}
-          onPress={resetFromBaseline}
+          style={[s.actionBtn, { backgroundColor: colors.chipBg }]}
+          onPress={handleImport}
         >
-          <Text style={g.cancelBtnText}>{t("settingsResetDataButton")}</Text>
+          <Text style={[s.actionBtnText, { color: colors.text }]}>{t("settingsImport")}</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.section}>
-        <Text style={g.titleSection}>{t("remindersScreenTitle")}</Text>
-        <TouchableOpacity
-          style={[g.primaryButtonOutline, styles.sectionBtn]}
-          onPress={openAdd}
-        >
-          <Text style={g.primaryButtonOutlineText}>
-            {t("remindersAddReminder")}
-          </Text>
-        </TouchableOpacity>
-        {reminders.map((item) => (
-          <View key={item.id} style={[g.cardRow, styles.reminderRow]}>
-            <View style={g.rowText}>
-              <Text style={g.titleCard}>{item.title}</Text>
-              <Text style={g.subtitle}>{item.time}</Text>
-            </View>
-            <Switch
-              value={item.enabled}
-              onValueChange={(v) => onToggleEnabled(item, v)}
-              trackColor={{ false: colors.switchTrack, true: colors.primary }}
-            />
-            <TouchableOpacity
-              onPress={() => openEdit(item)}
-              style={g.actionBtn}
-            >
-              <Text style={g.linkText}>{t("remindersEdit")}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => removeReminder(item)}
-              style={g.actionBtn}
-            >
-              <Text style={g.deleteText}>{t("remindersDelete")}</Text>
-            </TouchableOpacity>
-          </View>
-        ))}
-      </View>
-
-      <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={g.modalOverlay}>
-          <View style={g.modal}>
-            <Text style={g.modalTitle}>
-              {editing
-                ? t("remindersEditReminder")
-                : t("remindersNewReminder")}
-            </Text>
-            <TextInput
-              style={[g.input, g.inputWithMargin]}
-              value={title}
-              onChangeText={setTitle}
-              placeholder={t("remindersTitlePlaceholder")}
-              placeholderTextColor={colors.placeholder}
-            />
-            <TouchableOpacity
-              style={styles.timeRow}
-              onPress={() => setShowTimePicker(true)}
-            >
-              <Text style={[g.labelMuted, styles.timeLabel]}>
-                {t("remindersTime")}
-              </Text>
-              <Text style={g.textBody}>{dateToTime(time)}</Text>
-            </TouchableOpacity>
-            <View style={styles.linkMealWrap}>
-              <Text style={g.labelMuted}>{t("remindersLinkMeal")}</Text>
-              <View style={styles.linkMealRow}>
-                {(
-                  [
-                    { value: undefined, label: t("remindersMealNone") },
-                    { value: "morning" as MealType, label: t("mealBreakfast") },
-                    { value: "lunch" as MealType, label: t("mealLunch") },
-                    { value: "evening" as MealType, label: t("mealEvening") },
-                  ] as const
-                ).map((opt) => {
-                  const selected = linkedMealType === opt.value;
-                  return (
-                    <TouchableOpacity
-                      key={String(opt.value ?? "none")}
-                      style={[
-                        styles.linkMealBtn,
-                        {
-                          borderColor: selected ? colors.primary : colors.borderLight,
-                          backgroundColor: selected ? colors.chipSelectedBg : "transparent",
-                        },
-                      ]}
-                      onPress={() => setLinkedMealType(opt.value)}
-                    >
-                      <Text style={{ color: selected ? colors.primary : colors.text }}>{opt.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-            {showTimePicker && (
-              <DateTimePicker
-                value={time}
-                mode="time"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={(_, d) => {
-                  if (d) setTime(d);
-                  setShowTimePicker(Platform.OS === "ios");
-                }}
-              />
-            )}
-            <View style={g.modalButtons}>
-              <TouchableOpacity
-                style={g.cancelBtn}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={g.cancelBtnText}>{t("remindersCancel")}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={g.saveBtn} onPress={save}>
-                <Text style={g.saveBtnText}>{t("remindersSave")}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+      {toast && (
+        <View style={[s.toast, { backgroundColor: colors.pastelGreen }]}>
+          <Text style={[s.toastText, { color: colors.text }]}>{toast}</Text>
         </View>
-      </Modal>
+      )}
     </ScrollView>
   );
 }
 
-function useLocalStyles(colors: { borderLight: string }) {
+function useStyles(colors: {
+  card: string;
+  text: string;
+  textMuted: string;
+  primary: string;
+  chipBg: string;
+  pastelGreen: string;
+}) {
   return React.useMemo(
     () =>
       StyleSheet.create({
-        section: {
+        card: {
           marginHorizontal: spacing.screenPadding,
-          marginTop: spacing.contentBottom,
-          paddingTop: spacing.screenPadding,
-          borderTopWidth: 1,
-          borderTopColor: colors.borderLight,
+          borderRadius: spacing.radiusLg,
+          padding: 16,
+          marginBottom: 14,
         },
-        sectionBtn: { marginTop: 8 },
-        reminderRow: { marginTop: 8 },
-        timeRow: {
+        cardLabel: {
+          fontSize: 13,
+          fontFamily: fonts.medium,
+          marginBottom: 10,
+        },
+        chipRow: {
           flexDirection: "row",
-          alignItems: "center",
-          marginBottom: 20,
+          gap: 10,
         },
-        timeLabel: { marginRight: 12 },
-        linkMealWrap: { marginBottom: 20, gap: 8 },
-        linkMealRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-        githubTokenButtons: { flexDirection: "row", gap: 10 },
-        linkMealBtn: {
-          borderWidth: 1,
-          borderRadius: 8,
-          paddingVertical: 6,
-          paddingHorizontal: 10,
+        chip: {
+          flex: 1,
+          paddingVertical: 12,
+          borderRadius: spacing.radiusMd,
+          alignItems: "center",
+        },
+        chipText: {
+          fontSize: 15,
+          fontFamily: fonts.semiBold,
+        },
+        saveBtn: {
+          paddingVertical: 12,
+          borderRadius: spacing.radiusMd,
+          alignItems: "center",
+        },
+        saveBtnText: {
+          color: "#fff",
+          fontSize: 15,
+          fontFamily: fonts.semiBold,
+        },
+        syncInfo: {
+          fontSize: 12,
+          fontFamily: fonts.regular,
+          marginTop: 10,
+          textAlign: "center",
+        },
+        actionBtn: {
+          paddingVertical: 14,
+          borderRadius: spacing.radiusMd,
+          alignItems: "center",
+          marginBottom: 8,
+        },
+        actionBtnText: {
+          fontSize: 15,
+          fontFamily: fonts.medium,
+        },
+        toast: {
+          marginHorizontal: spacing.screenPadding,
+          borderRadius: spacing.radiusMd,
+          paddingVertical: 10,
+          paddingHorizontal: 12,
+          marginTop: 8,
+        },
+        toastText: {
+          fontSize: 13,
+          fontFamily: fonts.medium,
+          textAlign: "center",
         },
       }),
     [colors],
