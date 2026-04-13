@@ -75,7 +75,6 @@ export const en = {
   dataStartDateTitle: "Change start date",
   dataStartDateHint: "First day date; all rows will shift by same number of days",
   dataInvalidDate: "Invalid date. Use real YYYY-MM-DD date",
-
   // Statistics screen
   statsNoData: "No data to analyze",
   statsNoDataHint: "Add feeding data first",

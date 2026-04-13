@@ -77,7 +77,6 @@ export const ru: Record<TranslationKey, string> = {
   dataStartDateTitle: "Изменить стартовую дату",
   dataStartDateHint: "Дата первого дня; все строки сдвинутся на то же число дней",
   dataInvalidDate: "Некорректная дата. Используйте реальную дату YYYY-MM-DD",
-
   // Statistics screen
   statsNoData: "Нет данных для анализа",
   statsNoDataHint: "Сначала добавьте данные о питании",

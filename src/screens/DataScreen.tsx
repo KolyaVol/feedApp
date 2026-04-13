@@ -38,6 +38,23 @@ function isValidIsoDate(dateStr: string): boolean {
   return !isNaN(d.getTime()) && formatDateStr(d) === dateStr;
 }
 
+function levenshtein(a: string, b: string): number {
+  const dp = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i += 1) dp[i][0] = i;
+  for (let j = 0; j <= b.length; j += 1) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost,
+      );
+    }
+  }
+  return dp[a.length][b.length];
+}
+
 export function DataScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -331,10 +348,35 @@ export function DataScreen() {
   const getProductSuggestions = useCallback(
     (value: string) => {
       const q = value.trim().toLocaleLowerCase();
-      if (!q) return recentProducts.slice(0, 8);
+      if (!q) return [];
       return recentProducts
-        .filter((product) => product.toLocaleLowerCase().includes(q))
-        .slice(0, 8);
+        .map((product) => {
+          const normalized = product.toLocaleLowerCase();
+          if (normalized === q) return null;
+          const idx = normalized.indexOf(q);
+          const starts = idx === 0 ? 1 : 0;
+          const includes = idx >= 0 ? 1 : 0;
+          const distance = levenshtein(q, normalized);
+          const lengthDelta = Math.abs(normalized.length - q.length);
+          return { product, idx: idx >= 0 ? idx : 999, starts, includes, distance, lengthDelta };
+        })
+        .filter((item): item is {
+          product: string;
+          idx: number;
+          starts: number;
+          includes: number;
+          distance: number;
+          lengthDelta: number;
+        } => !!item)
+        .sort((a, b) => {
+          if (b.starts !== a.starts) return b.starts - a.starts;
+          if (b.includes !== a.includes) return b.includes - a.includes;
+          if (a.distance !== b.distance) return a.distance - b.distance;
+          if (a.idx !== b.idx) return a.idx - b.idx;
+          return a.lengthDelta - b.lengthDelta;
+        })
+        .map((item) => item.product)
+        .slice(0, 7);
     },
     [recentProducts],
   );
@@ -408,168 +450,125 @@ export function DataScreen() {
             </Text>
           </View>
         ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator>
-            <View style={s.tableWrap}>
-              <View style={[s.headerRow, { backgroundColor: colors.card, borderColor: colors.borderLight }]}>
-                <View style={s.colDay}>
-                  <Text style={[s.headerText, { color: colors.textMuted }]}>{t("dataDate")}</Text>
-                </View>
-                {MEAL_TYPES.map((type) => (
-                  <React.Fragment key={type}>
-                    <View style={s.colFood}>
-                      <Text style={[s.headerText, { color: colors.textMuted }]}>{mealLabel(type)}</Text>
-                    </View>
-                    <View style={s.colGrams}>
-                      <Text style={[s.headerText, { color: colors.textMuted }]}>{t("grams")}</Text>
-                    </View>
-                  </React.Fragment>
-                ))}
-                <View style={s.colNotes}>
-                  <Text style={[s.headerText, { color: colors.textMuted }]}>{t("notes")}</Text>
-                </View>
-              </View>
-
-              {days.map((day) => {
-                const isToday = day.date === todayStr;
-                return (
-                  <View
-                    key={day.id}
-                    style={[
-                      s.row,
-                      { backgroundColor: colors.card, borderColor: colors.borderLight },
-                      isToday && { backgroundColor: colors.chipSelectedBg },
-                    ]}
-                  >
-                    <View style={s.colDay}>
-                      <TextInput
-                        style={[s.cellInput, s.cellDate, { color: colors.text, borderColor: colors.borderLight }]}
-                        value={dateDrafts[day.id] ?? day.date}
-                        onFocus={() =>
-                          setDateDrafts((prev) => ({ ...prev, [day.id]: prev[day.id] ?? day.date }))
-                        }
-                        onChangeText={(v) =>
-                          setDateDrafts((prev) => ({ ...prev, [day.id]: v.replace(/[^0-9-]/g, "") }))
-                        }
-                        onBlur={() => handleDateInputBlur(day)}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor={colors.placeholder}
-                        maxLength={10}
-                      />
-                      <TouchableOpacity
-                        style={[s.rowActionsBtn, { backgroundColor: colors.chipBg, borderColor: colors.borderLight }]}
-                        onPress={() => setActionModalDayId(day.id)}
-                      >
-                        <Text style={[s.rowActionsIcon, { color: colors.text }]}>☰</Text>
-                      </TouchableOpacity>
-                    </View>
-                    {MEAL_TYPES.map((type) => {
-                      const meals = day[type];
-                      return (
-                        <React.Fragment key={type}>
-                          <View style={s.colFood}>
-                            {meals.length === 0 ? (
-                              <TouchableOpacity
-                                style={[s.addEntryBtn, { borderColor: colors.borderLight }]}
-                                onPress={() => openAddProduct(day.id, type)}
-                              >
-                                <Text style={[s.addEntryText, { color: colors.primary }]}>+</Text>
-                              </TouchableOpacity>
-                            ) : (
-                              meals.map((entry, idx) => (
-                                <View key={idx} style={s.mealEntryRow}>
-                                  <TextInput
-                                    style={[s.cellInput, s.cellProduct, { color: colors.text, borderColor: colors.borderLight }]}
-                                    value={entry.product}
-                                    onChangeText={(v) => updateMealEntry(day.id, type, idx, "product", v)}
-                                    onFocus={() => setActiveProductField(`${day.id}:${type}:${idx}`)}
-                                    placeholder={t("product")}
-                                    placeholderTextColor={colors.placeholder}
-                                  />
-                                  <TouchableOpacity
-                                    style={s.removeEntryBtn}
-                                    onPress={() => removeMealEntry(day.id, type, idx)}
-                                  >
-                                    <Text style={[s.removeEntryText, { color: colors.danger }]}>×</Text>
-                                  </TouchableOpacity>
-                                  {activeProductField === `${day.id}:${type}:${idx}` && (
-                                    <View style={[s.suggestionsWrap, { borderColor: colors.borderLight, backgroundColor: colors.card }]}>
-                                      {getProductSuggestions(entry.product).map((suggestion) => (
-                                        <TouchableOpacity
-                                          key={suggestion}
-                                          style={[s.suggestionChip, { backgroundColor: colors.chipBg }]}
-                                          onPress={() => updateMealEntry(day.id, type, idx, "product", suggestion)}
-                                        >
-                                          <Text style={[s.suggestionChipText, { color: colors.text }]}>{suggestion}</Text>
-                                        </TouchableOpacity>
-                                      ))}
-                                    </View>
-                                  )}
-                                </View>
-                              ))
-                            )}
-                            {meals.length > 0 && (
-                              <TouchableOpacity
-                                style={s.addMoreBtn}
-                                onPress={() => openAddProduct(day.id, type)}
-                              >
-                                <Text style={[s.addMoreText, { color: colors.primary }]}>+ {t("add")}</Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                          <View style={s.colGrams}>
-                            {meals.map((entry, idx) => (
-                              <TextInput
-                                key={idx}
-                                style={[
-                                  s.cellInput,
-                                  s.cellGrams,
-                                  { color: colors.text, borderColor: colors.borderLight },
-                                  (isNaN(entry.grams) || entry.grams < 0) && { borderColor: colors.danger },
-                                ]}
-                                value={entry.grams > 0 ? String(entry.grams) : ""}
-                                onChangeText={(v) => updateMealEntry(day.id, type, idx, "grams", v)}
-                                onFocus={() => setActiveGramsField(`${day.id}:${type}:${idx}`)}
-                                keyboardType="numeric"
-                                placeholder="0"
-                                placeholderTextColor={colors.placeholder}
-                              />
-                            ))}
-                            {meals.map((entry, idx) => (
-                              <View key={`${idx}-suggest`} style={s.inlineSuggestionsRow}>
-                                {activeGramsField === `${day.id}:${type}:${idx}` &&
-                                  getGramSuggestions(
-                                    entry.grams > 0 ? String(entry.grams) : "",
-                                    recentGrams[0] ?? 0,
-                                  ).map((gram) => (
-                                    <TouchableOpacity
-                                      key={`${day.id}:${type}:${idx}:${gram}`}
-                                      style={[s.gramChip, { backgroundColor: colors.chipBg }]}
-                                      onPress={() => updateMealEntry(day.id, type, idx, "grams", String(gram))}
-                                    >
-                                      <Text style={[s.gramChipText, { color: colors.text }]}>{gram}</Text>
-                                    </TouchableOpacity>
-                                  ))}
-                              </View>
-                            ))}
-                          </View>
-                        </React.Fragment>
-                      );
-                    })}
-                    <View style={s.colNotes}>
-                      <TextInput
-                        style={[s.cellInput, s.cellNotes, { color: colors.text, borderColor: colors.borderLight }]}
-                        value={day.notes}
-                        onChangeText={(v) => updateDay(day.id, { notes: v })}
-                        placeholder={t("notes")}
-                        placeholderTextColor={colors.placeholder}
-                        multiline
-                      />
-                    </View>
+          <View style={s.cardsWrap}>
+            {days.map((day) => {
+              const isToday = day.date === todayStr;
+              const cardInputBorderColor = isToday ? colors.border : colors.borderLight;
+              return (
+                <View
+                  key={day.id}
+                  style={[
+                    s.dayCard,
+                    { backgroundColor: colors.card, borderColor: colors.borderLight },
+                    isToday && { backgroundColor: colors.chipSelectedBg },
+                  ]}
+                >
+                  <View style={s.dateRow}>
+                    <TextInput
+                      style={[s.cellInput, s.cellDate, { color: colors.text, borderColor: cardInputBorderColor }]}
+                      value={dateDrafts[day.id] ?? day.date}
+                      onFocus={() =>
+                        setDateDrafts((prev) => ({ ...prev, [day.id]: prev[day.id] ?? day.date }))
+                      }
+                      onChangeText={(v) =>
+                        setDateDrafts((prev) => ({ ...prev, [day.id]: v.replace(/[^0-9-]/g, "") }))
+                      }
+                      onBlur={() => handleDateInputBlur(day)}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={colors.placeholder}
+                      maxLength={10}
+                    />
+                    <TouchableOpacity
+                      style={[s.rowActionsBtn, { backgroundColor: colors.chipBg, borderColor: cardInputBorderColor }]}
+                      onPress={() => setActionModalDayId(day.id)}
+                    >
+                      <Text style={[s.rowActionsIcon, { color: colors.text }]}>☰</Text>
+                    </TouchableOpacity>
                   </View>
-                );
-              })}
-            </View>
-          </ScrollView>
+
+                  {MEAL_TYPES.map((type) => {
+                    const meals = day[type];
+                    if (meals.length === 0) return null;
+                    return (
+                      <View key={type} style={s.mealSection}>
+                        <Text style={[s.mealTitle, { color: colors.textMuted }]}>{mealLabel(type)}</Text>
+                        {meals.map((entry, idx) => (
+                          <View key={idx} style={s.mealEntryRow}>
+                            <TextInput
+                              style={[s.cellInput, s.cellProduct, { color: colors.text, borderColor: cardInputBorderColor }]}
+                              value={entry.product}
+                              onChangeText={(v) => updateMealEntry(day.id, type, idx, "product", v)}
+                              onFocus={() => setActiveProductField(`${day.id}:${type}:${idx}`)}
+                              placeholder={t("product")}
+                              placeholderTextColor={colors.placeholder}
+                            />
+                            <TextInput
+                              style={[
+                                s.cellInput,
+                                s.cardGramsInput,
+                                { color: colors.text, borderColor: cardInputBorderColor },
+                                (isNaN(entry.grams) || entry.grams < 0) && { borderColor: colors.danger },
+                              ]}
+                              value={entry.grams > 0 ? String(entry.grams) : ""}
+                              onChangeText={(v) => updateMealEntry(day.id, type, idx, "grams", v)}
+                              onFocus={() => setActiveGramsField(`${day.id}:${type}:${idx}`)}
+                              keyboardType="numeric"
+                              placeholder="0"
+                              placeholderTextColor={colors.placeholder}
+                            />
+                            <TouchableOpacity
+                              style={s.removeEntryBtn}
+                              onPress={() => removeMealEntry(day.id, type, idx)}
+                            >
+                              <Text style={[s.removeEntryText, { color: colors.danger }]}>×</Text>
+                            </TouchableOpacity>
+                            {activeProductField === `${day.id}:${type}:${idx}` && (
+                              <View style={[s.suggestionsWrap, { backgroundColor: colors.card }]}>
+                                {getProductSuggestions(entry.product).map((suggestion) => (
+                                  <TouchableOpacity
+                                    key={suggestion}
+                                    style={[s.suggestionChip, { backgroundColor: colors.chipBg }]}
+                                    onPress={() => updateMealEntry(day.id, type, idx, "product", suggestion)}
+                                  >
+                                    <Text style={[s.suggestionChipText, { color: colors.text }]}>{suggestion}</Text>
+                                  </TouchableOpacity>
+                                ))}
+                              </View>
+                            )}
+                            {activeGramsField === `${day.id}:${type}:${idx}` && (
+                              <View style={s.inlineSuggestionsRow}>
+                                {getGramSuggestions(entry.grams > 0 ? String(entry.grams) : "", recentGrams[0] ?? 0).map((gram) => (
+                                  <TouchableOpacity
+                                    key={`${day.id}:${type}:${idx}:${gram}`}
+                                    style={[s.gramChip, { backgroundColor: colors.chipBg }]}
+                                    onPress={() => updateMealEntry(day.id, type, idx, "grams", String(gram))}
+                                  >
+                                    <Text style={[s.gramChipText, { color: colors.text }]}>{gram}</Text>
+                                  </TouchableOpacity>
+                                ))}
+                              </View>
+                            )}
+                          </View>
+                        ))}
+                        <TouchableOpacity style={s.addMoreBtn} onPress={() => openAddProduct(day.id, type)}>
+                          <Text style={[s.addMoreText, { color: colors.primary }]}>+ {t("add")}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+
+                  <TextInput
+                    style={[s.cellInput, s.cellNotes, { color: colors.text, borderColor: cardInputBorderColor }]}
+                    value={day.notes}
+                    onChangeText={(v) => updateDay(day.id, { notes: v })}
+                    placeholder={t("notes")}
+                    placeholderTextColor={colors.placeholder}
+                    multiline
+                  />
+                </View>
+              );
+            })}
+          </View>
         )}
       </ScrollView>
 
@@ -595,6 +594,28 @@ export function DataScreen() {
             >
               <Text style={[s.actionModalBtnText, { color: colors.text }]}>↓ {t("dataMoveDown")}</Text>
             </TouchableOpacity>
+            {actionDay && actionDay.lunch.length === 0 && (
+              <TouchableOpacity
+                style={[s.actionModalBtn, { backgroundColor: colors.chipBg }]}
+                onPress={() => {
+                  openAddProduct(actionDay.id, "lunch");
+                  setActionModalDayId(null);
+                }}
+              >
+                <Text style={[s.actionModalBtnText, { color: colors.text }]}>+ {t("mealLunch")}</Text>
+              </TouchableOpacity>
+            )}
+            {actionDay && actionDay.evening.length === 0 && (
+              <TouchableOpacity
+                style={[s.actionModalBtn, { backgroundColor: colors.chipBg }]}
+                onPress={() => {
+                  openAddProduct(actionDay.id, "evening");
+                  setActionModalDayId(null);
+                }}
+              >
+                <Text style={[s.actionModalBtnText, { color: colors.text }]}>+ {t("mealEvening")}</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[s.actionModalBtn, { backgroundColor: colors.pastelRed }]}
               onPress={() => actionModalDayId && handleDeleteDay(actionModalDayId)}
@@ -767,35 +788,21 @@ function useStyles(colors: {
           fontSize: 40,
           marginBottom: 12,
         },
-        tableWrap: {
+        cardsWrap: {
           paddingHorizontal: spacing.screenPadding,
-          minWidth: "100%",
+          gap: 10,
         },
-        headerRow: {
+        dayCard: {
+          borderWidth: 1,
+          borderRadius: spacing.radiusMd,
+          padding: compact ? 8 : 10,
+          gap: 8,
+        },
+        dateRow: {
           flexDirection: "row",
           alignItems: "center",
-          borderWidth: 1,
-          paddingVertical: compact ? 8 : 10,
-          paddingHorizontal: compact ? 6 : 8,
-          gap: compact ? 3 : 4,
+          gap: 8,
         },
-        headerText: {
-          fontSize: 12,
-          fontFamily: fonts.medium,
-        },
-        row: {
-          flexDirection: "row",
-          alignItems: "flex-start",
-          borderWidth: 1,
-          borderTopWidth: 0,
-          paddingVertical: compact ? 6 : 8,
-          paddingHorizontal: compact ? 6 : 8,
-          gap: compact ? 3 : 4,
-        },
-        colDay: { width: compact ? 92 : 100 },
-        colFood: { width: compact ? 140 : 150 },
-        colGrams: { width: compact ? 60 : 64 },
-        colNotes: { width: compact ? 108 : 120 },
         cellInput: {
           borderWidth: 1,
           borderRadius: spacing.radiusSm,
@@ -804,15 +811,22 @@ function useStyles(colors: {
           fontSize: 13,
           fontFamily: fonts.regular,
         },
-        cellDate: { width: "100%" },
+        cellDate: { flex: 1 },
         cellProduct: { flex: 1, minWidth: 0 },
-        cellGrams: { width: "100%", textAlign: "right" },
+        cardGramsInput: { width: 64, textAlign: "right" },
         cellNotes: { width: "100%", minHeight: 36 },
+        mealSection: {
+          gap: 4,
+        },
+        mealTitle: {
+          fontSize: 12,
+          fontFamily: fonts.medium,
+        },
         mealEntryRow: {
           flexDirection: "row",
-          alignItems: "flex-start",
+          alignItems: "center",
           width: "100%",
-          gap: 2,
+          gap: 6,
           marginBottom: 2,
           flexWrap: "wrap",
         },
@@ -850,11 +864,12 @@ function useStyles(colors: {
           flexDirection: "row",
           flexWrap: "wrap",
           gap: 4,
-          borderWidth: 1,
           borderRadius: spacing.radiusSm,
           padding: 4,
           width: "100%",
           marginTop: 4,
+          maxHeight: 84,
+          overflow: "hidden",
         },
         inlineSuggestionsRow: {
           flexDirection: "row",
@@ -888,9 +903,8 @@ function useStyles(colors: {
           fontFamily: fonts.medium,
         },
         rowActionsBtn: {
-          marginTop: 6,
-          width: "100%",
-          height: 30,
+          width: 34,
+          height: 34,
           borderRadius: spacing.radiusSm,
           borderWidth: 1,
           alignItems: "center",
