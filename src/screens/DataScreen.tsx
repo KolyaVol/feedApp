@@ -14,15 +14,16 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
+import * as Clipboard from "expo-clipboard";
 import { useFeedDays } from "../hooks/useFeedDays";
-import { pullFeedDays, pushFeedDays } from "../remoteFeed/sync";
+import { useFeedDaysContext } from "../contexts/FeedDaysContext";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLocale } from "../contexts/LocaleContext";
 import { fonts, spacing } from "../theme";
 import type { FeedDay, MealEntry, MealType } from "../types";
 import { addDaysToDate, formatDateStr } from "../data/feedDays";
-import { getGithubToken } from "../data/settings";
+import { formatDaysForChat } from "../utils/exportText";
 
 const MEAL_TYPES: MealType[] = ["morning", "lunch", "evening"];
 
@@ -62,11 +63,12 @@ export function DataScreen() {
   const { t, locale } = useLocale();
   const { colors } = useTheme();
   const s = useStyles(colors, width);
-  const { days, loading, refresh, addDay, updateDay, deleteDay, moveDay, replaceAll } =
+  const { days, loading, refresh, addDay, insertDayAt, updateDay, deleteDay, moveDay, replaceAll } =
     useFeedDays();
+  const { syncing, lastError, pullNow, clearError } = useFeedDaysContext();
 
-  const [syncing, setSyncing] = useState<"push" | "pull" | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const [pulling, setPulling] = useState(false);
   const [actionModalDayId, setActionModalDayId] = useState<string | null>(null);
   const [addProductModal, setAddProductModal] = useState<{
     dayId: string;
@@ -80,14 +82,6 @@ export function DataScreen() {
   const [activeProductField, setActiveProductField] = useState<string | null>(null);
   const [activeGramsField, setActiveGramsField] = useState<string | null>(null);
   const mainScrollRef = useRef<ScrollView | null>(null);
-  const autoPushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dirtyForAutoPushRef = useRef(false);
-  const initializedRef = useRef(false);
-  const skipNextChangeRef = useRef(false);
-  const lastPushedSnapshotRef = useRef("");
-  const latestDaysRef = useRef(days);
-
-  const snapshot = useMemo(() => JSON.stringify(days), [days]);
 
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
 
@@ -97,72 +91,36 @@ export function DataScreen() {
   }, []);
 
   useEffect(() => {
-    latestDaysRef.current = days;
-  }, [days]);
-
-  useEffect(() => {
-    if (!initializedRef.current) {
-      initializedRef.current = true;
-      lastPushedSnapshotRef.current = snapshot;
-      return;
-    }
-    if (skipNextChangeRef.current) {
-      skipNextChangeRef.current = false;
-      lastPushedSnapshotRef.current = snapshot;
-      dirtyForAutoPushRef.current = false;
-      return;
-    }
-    dirtyForAutoPushRef.current = snapshot !== lastPushedSnapshotRef.current;
-  }, [snapshot]);
-
-  useEffect(() => {
-    if (!dirtyForAutoPushRef.current || syncing || loading) return;
-    if (autoPushTimeoutRef.current) clearTimeout(autoPushTimeoutRef.current);
-    autoPushTimeoutRef.current = setTimeout(async () => {
-      if (syncing || !dirtyForAutoPushRef.current) return;
-      const token = await getGithubToken();
-      if (!token) return;
-      setSyncing("push");
-      const result = await pushFeedDays(latestDaysRef.current);
-      if (result.ok) {
-        lastPushedSnapshotRef.current = JSON.stringify(latestDaysRef.current);
-        dirtyForAutoPushRef.current = false;
-      } else {
-        showToast("error", result.text);
-      }
-      setSyncing(null);
-    }, 4000);
-
-    return () => {
-      if (autoPushTimeoutRef.current) clearTimeout(autoPushTimeoutRef.current);
-    };
-  }, [loading, showToast, syncing, snapshot]);
+    if (!lastError) return;
+    showToast("error", lastError.text);
+    clearError();
+  }, [lastError, showToast, clearError]);
 
   const handleAddDay = useCallback(async () => {
     await addDay();
   }, [addDay]);
 
   const handlePull = useCallback(async () => {
-    setSyncing("pull");
-    const result = await pullFeedDays();
+    setPulling(true);
+    const result = await pullNow();
+    setPulling(false);
     if (result.ok && result.days) {
-      if (result.days.length > 0) {
-        const normalizedDays = result.days.map((day) => ({
-          ...day,
-          eaten: {},
-        }));
-        skipNextChangeRef.current = true;
-        await replaceAll(normalizedDays);
-        lastPushedSnapshotRef.current = JSON.stringify(normalizedDays);
-        showToast("success", `${t("dataPullSuccess")} (${normalizedDays.length})`);
-      } else {
-        showToast("success", t("dataPullSuccess"));
-      }
-    } else {
+      showToast("success", `${t("dataPullSuccess")} (${result.days.length})`);
+    } else if (!result.ok) {
       showToast("error", result.text);
     }
-    setSyncing(null);
-  }, [replaceAll, showToast, t]);
+  }, [pullNow, showToast, t]);
+
+  const handleCopyForChat = useCallback(async () => {
+    if (days.length === 0) return;
+    try {
+      const text = formatDaysForChat(days);
+      await Clipboard.setStringAsync(text);
+      showToast("success", t("dataCopied"));
+    } catch (e: any) {
+      showToast("error", e?.message ?? "Copy failed");
+    }
+  }, [days, showToast, t]);
 
   const handleDeleteDay = useCallback(
     (id: string) => {
@@ -258,6 +216,26 @@ export function DataScreen() {
     [days, moveDay],
   );
 
+  const handleInsertAbove = useCallback(
+    (id: string) => {
+      const idx = days.findIndex((d) => d.id === id);
+      if (idx < 0) return;
+      void insertDayAt(idx);
+      setActionModalDayId(null);
+    },
+    [days, insertDayAt],
+  );
+
+  const handleInsertBelow = useCallback(
+    (id: string) => {
+      const idx = days.findIndex((d) => d.id === id);
+      if (idx < 0) return;
+      void insertDayAt(idx + 1);
+      setActionModalDayId(null);
+    },
+    [days, insertDayAt],
+  );
+
   const updateMealEntry = useCallback(
     (dayId: string, mealType: MealType, entryIdx: number, field: "product" | "grams", value: string) => {
       const day = days.find((d) => d.id === dayId);
@@ -348,7 +326,7 @@ export function DataScreen() {
   const getProductSuggestions = useCallback(
     (value: string) => {
       const q = value.trim().toLocaleLowerCase();
-      if (!q) return [];
+      if (!q) return recentProducts.slice(0, 7);
       return recentProducts
         .map((product) => {
           const normalized = product.toLocaleLowerCase();
@@ -427,10 +405,10 @@ export function DataScreen() {
           <TouchableOpacity
             style={[s.toolBtn, { backgroundColor: colors.chipBg }]}
             onPress={handlePull}
-            disabled={!!syncing}
+            disabled={syncing || pulling}
           >
             <Text style={[s.toolBtnText, { color: colors.text }]}>
-              {syncing === "pull" ? t("dataPulling") : t("dataPull")}
+              {pulling ? t("dataPulling") : t("dataPull")}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -438,6 +416,17 @@ export function DataScreen() {
             onPress={handleOpenStartDateModal}
           >
             <Text style={[s.toolBtnText, { color: colors.text }]}>{t("dataChangeStartDate")}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              s.toolBtn,
+              { backgroundColor: colors.chipBg },
+              days.length === 0 && g.buttonDisabled,
+            ]}
+            onPress={handleCopyForChat}
+            disabled={days.length === 0}
+          >
+            <Text style={[s.toolBtnText, { color: colors.text }]}>{t("dataCopyForChat")}</Text>
           </TouchableOpacity>
         </View>
 
@@ -594,6 +583,29 @@ export function DataScreen() {
             >
               <Text style={[s.actionModalBtnText, { color: colors.text }]}>↓ {t("dataMoveDown")}</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.actionModalBtn, { backgroundColor: colors.chipBg }]}
+              onPress={() => actionModalDayId && handleInsertAbove(actionModalDayId)}
+            >
+              <Text style={[s.actionModalBtnText, { color: colors.text }]}>+ {t("dataAddAbove")}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.actionModalBtn, { backgroundColor: colors.chipBg }]}
+              onPress={() => actionModalDayId && handleInsertBelow(actionModalDayId)}
+            >
+              <Text style={[s.actionModalBtnText, { color: colors.text }]}>+ {t("dataAddBelow")}</Text>
+            </TouchableOpacity>
+            {actionDay && actionDay.morning.length === 0 && (
+              <TouchableOpacity
+                style={[s.actionModalBtn, { backgroundColor: colors.chipBg }]}
+                onPress={() => {
+                  openAddProduct(actionDay.id, "morning");
+                  setActionModalDayId(null);
+                }}
+              >
+                <Text style={[s.actionModalBtnText, { color: colors.text }]}>+ {t("mealMorning")}</Text>
+              </TouchableOpacity>
+            )}
             {actionDay && actionDay.lunch.length === 0 && (
               <TouchableOpacity
                 style={[s.actionModalBtn, { backgroundColor: colors.chipBg }]}

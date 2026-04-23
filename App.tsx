@@ -19,6 +19,7 @@ import { BestPracticesScreen } from "./src/screens/BestPracticesScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ThemeProvider, useTheme } from "./src/contexts/ThemeContext";
 import { LocaleProvider, useLocale } from "./src/contexts/LocaleContext";
+import { FeedDaysProvider } from "./src/contexts/FeedDaysContext";
 import { fonts } from "./src/theme";
 import type { RootTabParamList } from "./src/navigation/types";
 import type { TranslationKey } from "./src/i18n/en";
@@ -154,9 +155,11 @@ export default function App() {
     <SafeAreaProvider>
       <LocaleProvider>
         <ThemeProvider>
-          <NavigationContainer>
-            <AppTabs />
-          </NavigationContainer>
+          <FeedDaysProvider>
+            <NavigationContainer>
+              <AppTabs />
+            </NavigationContainer>
+          </FeedDaysProvider>
         </ThemeProvider>
       </LocaleProvider>
     </SafeAreaProvider>

@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  Modal,
+  Pressable,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { File, Paths } from "expo-file-system";
@@ -21,19 +23,23 @@ import {
   setGithubToken as saveGithubToken,
   getLastSyncAt,
 } from "../data/settings";
-import { getFeedDays, setFeedDays } from "../data/feedDays";
+import { getFeedDays } from "../data/feedDays";
 import type { FeedDay } from "../types";
+import { useFeedDaysContext } from "../contexts/FeedDaysContext";
 
 export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const g = useGlobalStyles();
   const { t, locale, setLocale } = useLocale();
   const { theme, setTheme, colors } = useTheme();
+  const { replaceAll, pullNow } = useFeedDaysContext();
   const s = useStyles(colors);
 
   const [githubToken, setGithubToken] = useState("");
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [replaceModalVisible, setReplaceModalVisible] = useState(false);
+  const [replacingFromGithub, setReplacingFromGithub] = useState(false);
 
   useEffect(() => {
     getGithubToken().then(setGithubToken);
@@ -79,12 +85,25 @@ export function SettingsScreen() {
         return;
       }
       const days = parsed as FeedDay[];
-      await setFeedDays(days);
+      await replaceAll(days);
       showToast(t("settingsImportSuccess", { count: days.length }));
     } catch (e: any) {
       Alert.alert(t("error"), e?.message ?? t("settingsImportError"));
     }
-  }, [showToast, t]);
+  }, [replaceAll, showToast, t]);
+
+  const handleReplaceFromGithub = useCallback(async () => {
+    setReplacingFromGithub(true);
+    const result = await pullNow();
+    if (result.ok && result.days) {
+      showToast(t("settingsReplaceFromGithubSuccess", { count: result.days.length }));
+      setLastSync(new Date().toISOString());
+      setReplaceModalVisible(false);
+    } else if (!result.ok) {
+      Alert.alert(t("error"), result.text);
+    }
+    setReplacingFromGithub(false);
+  }, [pullNow, showToast, t]);
 
   return (
     <ScrollView style={g.screenContainer} contentContainerStyle={g.screenContent}>
@@ -192,6 +211,15 @@ export function SettingsScreen() {
         >
           <Text style={[s.actionBtnText, { color: colors.text }]}>{t("settingsImport")}</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.actionBtn, { backgroundColor: colors.pastelRed }]}
+          onPress={() => setReplaceModalVisible(true)}
+          disabled={replacingFromGithub}
+        >
+          <Text style={[s.actionBtnText, { color: colors.text }]}>
+            {replacingFromGithub ? t("settingsReplacingFromGithub") : t("settingsReplaceFromGithub")}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {toast && (
@@ -199,6 +227,35 @@ export function SettingsScreen() {
           <Text style={[s.toastText, { color: colors.text }]}>{toast}</Text>
         </View>
       )}
+
+      <Modal visible={replaceModalVisible} animationType="fade" transparent>
+        <Pressable style={g.modalOverlay} onPress={() => setReplaceModalVisible(false)}>
+          <Pressable style={g.modal} onPress={(e) => e.stopPropagation()}>
+            <Text style={g.modalTitle}>{t("settingsReplaceFromGithubTitle")}</Text>
+            <Text style={[g.labelMuted, { marginBottom: 12 }]}>
+              {t("settingsReplaceFromGithubWarning")}
+            </Text>
+            <View style={g.modalButtons}>
+              <TouchableOpacity
+                style={g.cancelBtn}
+                onPress={() => setReplaceModalVisible(false)}
+                disabled={replacingFromGithub}
+              >
+                <Text style={g.cancelBtnText}>{t("cancel")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[g.saveBtn, replacingFromGithub && g.buttonDisabled]}
+                onPress={handleReplaceFromGithub}
+                disabled={replacingFromGithub}
+              >
+                <Text style={g.saveBtnText}>
+                  {replacingFromGithub ? t("settingsReplacingFromGithub") : t("settingsConfirmReplace")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -210,6 +267,7 @@ function useStyles(colors: {
   primary: string;
   chipBg: string;
   pastelGreen: string;
+  pastelRed: string;
 }) {
   return React.useMemo(
     () =>

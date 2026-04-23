@@ -17,9 +17,7 @@ import { useTheme } from "../contexts/ThemeContext";
 import { useLocale } from "../contexts/LocaleContext";
 import { fonts, spacing } from "../theme";
 import type { FeedDay, MealType, MealEntry } from "../types";
-import { formatDateStr, addDaysToDate } from "../data/feedDays";
-import { pushFeedDays } from "../remoteFeed/sync";
-import { getGithubToken } from "../data/settings";
+import { formatDateStr } from "../data/feedDays";
 
 function totalGramsForDay(day: FeedDay): number {
   const sum = (arr: MealEntry[]) => arr.reduce((s, e) => s + e.grams, 0);
@@ -64,51 +62,10 @@ export function MainScreen() {
   const [viewDate, setViewDate] = useState(() => formatDateStr(new Date()));
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
-  const [syncing, setSyncing] = useState(false);
-  const autoPushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productSuggestionTapRef = useRef(false);
   const gramSuggestionTapRef = useRef(false);
-  const dirtyForAutoPushRef = useRef(false);
-  const initializedRef = useRef(false);
-  const lastPushedSnapshotRef = useRef("");
-  const latestDaysRef = useRef(days);
 
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
-  const snapshot = useMemo(() => JSON.stringify(days), [days]);
-
-  useEffect(() => {
-    latestDaysRef.current = days;
-  }, [days]);
-
-  useEffect(() => {
-    if (!initializedRef.current) {
-      initializedRef.current = true;
-      lastPushedSnapshotRef.current = snapshot;
-      return;
-    }
-    dirtyForAutoPushRef.current = snapshot !== lastPushedSnapshotRef.current;
-  }, [snapshot]);
-
-  useEffect(() => {
-    if (!dirtyForAutoPushRef.current || syncing || loading) return;
-    if (autoPushTimeoutRef.current) clearTimeout(autoPushTimeoutRef.current);
-    autoPushTimeoutRef.current = setTimeout(async () => {
-      if (syncing || !dirtyForAutoPushRef.current) return;
-      const token = await getGithubToken();
-      if (!token) return;
-      setSyncing(true);
-      const result = await pushFeedDays(latestDaysRef.current);
-      if (result.ok) {
-        lastPushedSnapshotRef.current = JSON.stringify(latestDaysRef.current);
-        dirtyForAutoPushRef.current = false;
-      }
-      setSyncing(false);
-    }, 4000);
-
-    return () => {
-      if (autoPushTimeoutRef.current) clearTimeout(autoPushTimeoutRef.current);
-    };
-  }, [loading, snapshot, syncing]);
 
   const todayDay = useMemo(
     () => days.find((d) => d.date === viewDate) ?? null,

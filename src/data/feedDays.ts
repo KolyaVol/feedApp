@@ -27,6 +27,18 @@ export async function addFeedDay(day: Omit<FeedDay, "id">): Promise<FeedDay> {
   return newDay;
 }
 
+export async function insertFeedDayAt(
+  day: Omit<FeedDay, "id">,
+  index: number,
+): Promise<FeedDay> {
+  const list = await getFeedDays();
+  const newDay: FeedDay = { ...day, id: generateId() };
+  const clamped = Math.max(0, Math.min(index, list.length));
+  list.splice(clamped, 0, newDay);
+  await setFeedDays(list);
+  return newDay;
+}
+
 export async function updateFeedDay(
   id: string,
   updates: Partial<FeedDay>,
