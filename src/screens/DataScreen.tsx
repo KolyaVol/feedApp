@@ -1,15 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
   ScrollView,
-  TextInput,
   TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
   Alert,
   Modal,
-  Pressable,
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,41 +16,29 @@ import { useFeedDaysContext } from "../contexts/FeedDaysContext";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLocale } from "../contexts/LocaleContext";
-import { fonts, spacing } from "../theme";
 import type { FeedDay, MealEntry, MealType } from "../types";
 import { addDaysToDate, formatDateStr } from "../data/feedDays";
 import { formatDaysForChat } from "../utils/exportText";
-
-const MEAL_TYPES: MealType[] = ["morning", "lunch", "evening"];
-
-function formatDateShort(dateStr: string, locale?: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString(locale, { day: "numeric", month: "short" });
-}
-
-function isValidIsoDate(dateStr: string): boolean {
-  const match = /^\d{4}-\d{2}-\d{2}$/.test(dateStr);
-  if (!match) return false;
-  const d = new Date(dateStr + "T00:00:00");
-  return !isNaN(d.getTime()) && formatDateStr(d) === dateStr;
-}
-
-function levenshtein(a: string, b: string): number {
-  const dp = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
-  for (let i = 0; i <= a.length; i += 1) dp[i][0] = i;
-  for (let j = 0; j <= b.length; j += 1) dp[0][j] = j;
-  for (let i = 1; i <= a.length; i += 1) {
-    for (let j = 1; j <= b.length; j += 1) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,
-        dp[i][j - 1] + 1,
-        dp[i - 1][j - 1] + cost,
-      );
-    }
-  }
-  return dp[a.length][b.length];
-}
+import {
+  collectRecentGrams,
+  collectRecentProducts,
+  getGramSuggestions as computeGramSuggestions,
+  rankProductSuggestions,
+} from "../utils/mealSuggestions";
+import {
+  removeMealEntryAt,
+  setMealEntryField,
+} from "../utils/mealMutations";
+import { mealLabel as getMealLabel } from "../utils/mealLabels";
+import { ScreenTitle } from "../components/ScreenTitle";
+import { CenteredLoader } from "../components/CenteredLoader";
+import { useToast } from "../hooks/useToast";
+import { DayRow } from "./data/DayRow";
+import { RowActionsModal } from "./data/RowActionsModal";
+import { AddProductModal } from "./data/AddProductModal";
+import { ShiftStartDateModal } from "./data/ShiftStartDateModal";
+import { isValidIsoDate, useDateDrafts } from "./data/hooks";
+import { useDataScreenStyles } from "./data/styles";
 
 export function DataScreen() {
   const insets = useSafeAreaInsets();
@@ -62,12 +46,12 @@ export function DataScreen() {
   const g = useGlobalStyles();
   const { t, locale } = useLocale();
   const { colors } = useTheme();
-  const s = useStyles(colors, width);
+  const s = useDataScreenStyles(colors, width);
   const { days, loading, refresh, addDay, insertDayAt, updateDay, deleteDay, moveDay, replaceAll } =
     useFeedDays();
   const { syncing, lastError, pullNow, clearError } = useFeedDaysContext();
 
-  const [toast, setToast] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const { toast, show: showToastRaw } = useToast<{ kind: "success" | "error"; text: string }>(2500);
   const [pulling, setPulling] = useState(false);
   const [actionModalDayId, setActionModalDayId] = useState<string | null>(null);
   const [addProductModal, setAddProductModal] = useState<{
@@ -78,17 +62,15 @@ export function DataScreen() {
   const [newGrams, setNewGrams] = useState("");
   const [startDateModalVisible, setStartDateModalVisible] = useState(false);
   const [newStartDate, setNewStartDate] = useState("");
-  const [dateDrafts, setDateDrafts] = useState<Record<string, string>>({});
   const [activeProductField, setActiveProductField] = useState<string | null>(null);
   const [activeGramsField, setActiveGramsField] = useState<string | null>(null);
-  const mainScrollRef = useRef<ScrollView | null>(null);
+  const dateDrafts = useDateDrafts();
 
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
 
   const showToast = useCallback((kind: "success" | "error", text: string) => {
-    setToast({ kind, text });
-    setTimeout(() => setToast(null), 2500);
-  }, []);
+    showToastRaw({ kind, text });
+  }, [showToastRaw]);
 
   useEffect(() => {
     if (!lastError) return;
@@ -166,34 +148,13 @@ export function DataScreen() {
     showToast("success", t("settingsSaved"));
   }, [days, newStartDate, replaceAll, showToast, t]);
 
-  const handleDateInputBlur = useCallback(
+  const handleDateBlur = useCallback(
     (day: FeedDay) => {
-      const raw = (dateDrafts[day.id] ?? day.date).trim();
-      if (!raw) {
-        setDateDrafts((prev) => {
-          const next = { ...prev };
-          delete next[day.id];
-          return next;
-        });
-        return;
-      }
-      if (!isValidIsoDate(raw)) {
-        showToast("error", t("dataInvalidDate"));
-        setDateDrafts((prev) => {
-          const next = { ...prev };
-          delete next[day.id];
-          return next;
-        });
-        return;
-      }
-      if (raw !== day.date) {
-        updateDay(day.id, { date: raw });
-      }
-      setDateDrafts((prev) => {
-        const next = { ...prev };
-        delete next[day.id];
-        return next;
-      });
+      dateDrafts.blur(
+        day,
+        (dayId, date) => updateDay(dayId, { date }),
+        () => showToast("error", t("dataInvalidDate")),
+      );
     },
     [dateDrafts, showToast, t, updateDay],
   );
@@ -240,16 +201,8 @@ export function DataScreen() {
     (dayId: string, mealType: MealType, entryIdx: number, field: "product" | "grams", value: string) => {
       const day = days.find((d) => d.id === dayId);
       if (!day) return;
-      const meals = [...day[mealType]];
-      const entry = meals[entryIdx];
-      if (!entry) return;
-      if (field === "product") {
-        meals[entryIdx] = { ...entry, product: value };
-      } else {
-        const n = parseInt(value, 10);
-        meals[entryIdx] = { ...entry, grams: isNaN(n) ? 0 : n };
-      }
-      updateDay(dayId, { [mealType]: meals });
+      const patch = setMealEntryField(day, mealType, entryIdx, field, value);
+      if (patch) updateDay(dayId, patch);
     },
     [days, updateDay],
   );
@@ -258,8 +211,7 @@ export function DataScreen() {
     (dayId: string, mealType: MealType, entryIdx: number) => {
       const day = days.find((d) => d.id === dayId);
       if (!day) return;
-      const meals = day[mealType].filter((_, i) => i !== entryIdx);
-      updateDay(dayId, { [mealType]: meals });
+      updateDay(dayId, removeMealEntryAt(day, mealType, entryIdx));
     },
     [days, updateDay],
   );
@@ -284,119 +236,43 @@ export function DataScreen() {
   }, [addProductModal, days, newGrams, newProduct, updateDay]);
 
   const actionDay = useMemo(
-    () => (actionModalDayId ? days.find((d) => d.id === actionModalDayId) : null),
+    () => (actionModalDayId ? days.find((d) => d.id === actionModalDayId) ?? null : null),
     [actionModalDayId, days],
   );
-  const recentProducts = useMemo(() => {
-    const unique = new Set<string>();
-    const list: string[] = [];
-    for (let d = days.length - 1; d >= 0; d -= 1) {
-      const day = days[d];
-      for (const mealType of MEAL_TYPES) {
-        const entries = day[mealType];
-        for (let i = entries.length - 1; i >= 0; i -= 1) {
-          const product = entries[i]?.product?.trim();
-          if (!product) continue;
-          const key = product.toLocaleLowerCase();
-          if (unique.has(key)) continue;
-          unique.add(key);
-          list.push(product);
-        }
-      }
-    }
-    return list;
-  }, [days]);
-  const recentGrams = useMemo(() => {
-    const unique = new Set<number>();
-    const list: number[] = [];
-    for (let d = days.length - 1; d >= 0; d -= 1) {
-      const day = days[d];
-      for (const mealType of MEAL_TYPES) {
-        const entries = day[mealType];
-        for (let i = entries.length - 1; i >= 0; i -= 1) {
-          const grams = entries[i]?.grams;
-          if (typeof grams !== "number" || grams <= 0 || unique.has(grams)) continue;
-          unique.add(grams);
-          list.push(grams);
-        }
-      }
-    }
-    return list;
-  }, [days]);
+  const recentProducts = useMemo(() => collectRecentProducts(days), [days]);
+  const recentGrams = useMemo(() => collectRecentGrams(days), [days]);
   const getProductSuggestions = useCallback(
-    (value: string) => {
-      const q = value.trim().toLocaleLowerCase();
-      if (!q) return recentProducts.slice(0, 7);
-      return recentProducts
-        .map((product) => {
-          const normalized = product.toLocaleLowerCase();
-          if (normalized === q) return null;
-          const idx = normalized.indexOf(q);
-          const starts = idx === 0 ? 1 : 0;
-          const includes = idx >= 0 ? 1 : 0;
-          const distance = levenshtein(q, normalized);
-          const lengthDelta = Math.abs(normalized.length - q.length);
-          return { product, idx: idx >= 0 ? idx : 999, starts, includes, distance, lengthDelta };
-        })
-        .filter((item): item is {
-          product: string;
-          idx: number;
-          starts: number;
-          includes: number;
-          distance: number;
-          lengthDelta: number;
-        } => !!item)
-        .sort((a, b) => {
-          if (b.starts !== a.starts) return b.starts - a.starts;
-          if (b.includes !== a.includes) return b.includes - a.includes;
-          if (a.distance !== b.distance) return a.distance - b.distance;
-          if (a.idx !== b.idx) return a.idx - b.idx;
-          return a.lengthDelta - b.lengthDelta;
-        })
-        .map((item) => item.product)
-        .slice(0, 7);
-    },
+    (value: string) =>
+      rankProductSuggestions(value, recentProducts, "emptyReturnsAll"),
     [recentProducts],
   );
   const getGramSuggestions = useCallback(
-    (raw: string, fallback: number) => {
-      const parsed = parseInt(raw, 10);
-      const base = !isNaN(parsed) && parsed > 0 ? parsed : fallback > 0 ? fallback : recentGrams[0] ?? 50;
-      const around = [base + 10, base + 5, base - 5, base - 10].filter((v) => v > 0);
-      const merged = [...around, ...recentGrams];
-      return Array.from(new Set(merged)).slice(0, 6);
-    },
+    (raw: string, fallback: number) =>
+      computeGramSuggestions(raw, fallback, recentGrams),
     [recentGrams],
+  );
+  const modalProductSuggestions = useMemo(
+    () => getProductSuggestions(newProduct),
+    [getProductSuggestions, newProduct],
+  );
+  const modalGramSuggestions = useMemo(
+    () => getGramSuggestions(newGrams, recentGrams[0] ?? 0),
+    [getGramSuggestions, newGrams, recentGrams],
   );
 
   const todayStr = formatDateStr(new Date());
-
-  const mealLabel = useCallback(
-    (type: MealType) => {
-      if (type === "morning") return t("mealMorning");
-      if (type === "lunch") return t("mealLunch");
-      return t("mealEvening");
-    },
-    [t],
-  );
+  const mealLabel = useCallback((type: MealType) => getMealLabel(t, type), [t]);
 
   if (loading) {
-    return (
-      <View style={[g.screenContainer, s.center]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
+    return <CenteredLoader />;
   }
 
   return (
     <View style={g.screenContainer}>
       <ScrollView
-        ref={mainScrollRef}
         contentContainerStyle={[g.screenContent, { paddingBottom: 100 + insets.bottom }]}
       >
-        <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>
-          {t("titleData")}
-        </Text>
+        <ScreenTitle>{t("titleData")}</ScreenTitle>
 
         <View style={s.toolbar}>
           <TouchableOpacity style={[s.toolBtn, { backgroundColor: colors.primary }]} onPress={handleAddDay}>
@@ -440,298 +316,87 @@ export function DataScreen() {
           </View>
         ) : (
           <View style={s.cardsWrap}>
-            {days.map((day) => {
-              const isToday = day.date === todayStr;
-              const cardInputBorderColor = isToday ? colors.border : colors.borderLight;
-              return (
-                <View
-                  key={day.id}
-                  style={[
-                    s.dayCard,
-                    { backgroundColor: colors.card, borderColor: colors.borderLight },
-                    isToday && { backgroundColor: colors.chipSelectedBg },
-                  ]}
-                >
-                  <View style={s.dateRow}>
-                    <TextInput
-                      style={[s.cellInput, s.cellDate, { color: colors.text, borderColor: cardInputBorderColor }]}
-                      value={dateDrafts[day.id] ?? day.date}
-                      onFocus={() =>
-                        setDateDrafts((prev) => ({ ...prev, [day.id]: prev[day.id] ?? day.date }))
-                      }
-                      onChangeText={(v) =>
-                        setDateDrafts((prev) => ({ ...prev, [day.id]: v.replace(/[^0-9-]/g, "") }))
-                      }
-                      onBlur={() => handleDateInputBlur(day)}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={colors.placeholder}
-                      maxLength={10}
-                    />
-                    <TouchableOpacity
-                      style={[s.rowActionsBtn, { backgroundColor: colors.chipBg, borderColor: cardInputBorderColor }]}
-                      onPress={() => setActionModalDayId(day.id)}
-                    >
-                      <Text style={[s.rowActionsIcon, { color: colors.text }]}>☰</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {MEAL_TYPES.map((type) => {
-                    const meals = day[type];
-                    if (meals.length === 0) return null;
-                    return (
-                      <View key={type} style={s.mealSection}>
-                        <Text style={[s.mealTitle, { color: colors.textMuted }]}>{mealLabel(type)}</Text>
-                        {meals.map((entry, idx) => (
-                          <View key={idx} style={s.mealEntryRow}>
-                            <TextInput
-                              style={[s.cellInput, s.cellProduct, { color: colors.text, borderColor: cardInputBorderColor }]}
-                              value={entry.product}
-                              onChangeText={(v) => updateMealEntry(day.id, type, idx, "product", v)}
-                              onFocus={() => setActiveProductField(`${day.id}:${type}:${idx}`)}
-                              placeholder={t("product")}
-                              placeholderTextColor={colors.placeholder}
-                            />
-                            <TextInput
-                              style={[
-                                s.cellInput,
-                                s.cardGramsInput,
-                                { color: colors.text, borderColor: cardInputBorderColor },
-                                (isNaN(entry.grams) || entry.grams < 0) && { borderColor: colors.danger },
-                              ]}
-                              value={entry.grams > 0 ? String(entry.grams) : ""}
-                              onChangeText={(v) => updateMealEntry(day.id, type, idx, "grams", v)}
-                              onFocus={() => setActiveGramsField(`${day.id}:${type}:${idx}`)}
-                              keyboardType="numeric"
-                              placeholder="0"
-                              placeholderTextColor={colors.placeholder}
-                            />
-                            <TouchableOpacity
-                              style={s.removeEntryBtn}
-                              onPress={() => removeMealEntry(day.id, type, idx)}
-                            >
-                              <Text style={[s.removeEntryText, { color: colors.danger }]}>×</Text>
-                            </TouchableOpacity>
-                            {activeProductField === `${day.id}:${type}:${idx}` && (
-                              <View style={[s.suggestionsWrap, { backgroundColor: colors.card }]}>
-                                {getProductSuggestions(entry.product).map((suggestion) => (
-                                  <TouchableOpacity
-                                    key={suggestion}
-                                    style={[s.suggestionChip, { backgroundColor: colors.chipBg }]}
-                                    onPress={() => updateMealEntry(day.id, type, idx, "product", suggestion)}
-                                  >
-                                    <Text style={[s.suggestionChipText, { color: colors.text }]}>{suggestion}</Text>
-                                  </TouchableOpacity>
-                                ))}
-                              </View>
-                            )}
-                            {activeGramsField === `${day.id}:${type}:${idx}` && (
-                              <View style={s.inlineSuggestionsRow}>
-                                {getGramSuggestions(entry.grams > 0 ? String(entry.grams) : "", recentGrams[0] ?? 0).map((gram) => (
-                                  <TouchableOpacity
-                                    key={`${day.id}:${type}:${idx}:${gram}`}
-                                    style={[s.gramChip, { backgroundColor: colors.chipBg }]}
-                                    onPress={() => updateMealEntry(day.id, type, idx, "grams", String(gram))}
-                                  >
-                                    <Text style={[s.gramChipText, { color: colors.text }]}>{gram}</Text>
-                                  </TouchableOpacity>
-                                ))}
-                              </View>
-                            )}
-                          </View>
-                        ))}
-                        <TouchableOpacity style={s.addMoreBtn} onPress={() => openAddProduct(day.id, type)}>
-                          <Text style={[s.addMoreText, { color: colors.primary }]}>+ {t("add")}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
-
-                  <TextInput
-                    style={[s.cellInput, s.cellNotes, { color: colors.text, borderColor: cardInputBorderColor }]}
-                    value={day.notes}
-                    onChangeText={(v) => updateDay(day.id, { notes: v })}
-                    placeholder={t("notes")}
-                    placeholderTextColor={colors.placeholder}
-                    multiline
-                  />
-                </View>
-              );
-            })}
+            {days.map((day) => (
+              <DayRow
+                key={day.id}
+                day={day}
+                isToday={day.date === todayStr}
+                styles={s}
+                colors={colors}
+                t={t}
+                dateDraft={dateDrafts.drafts[day.id]}
+                onDateFocus={dateDrafts.focus}
+                onDateChange={dateDrafts.change}
+                onDateBlur={handleDateBlur}
+                onOpenActions={setActionModalDayId}
+                onUpdateNotes={(id, notes) => updateDay(id, { notes })}
+                onOpenAddProduct={openAddProduct}
+                onUpdateMealEntry={updateMealEntry}
+                onRemoveMealEntry={removeMealEntry}
+                onFocusProductField={setActiveProductField}
+                onFocusGramsField={setActiveGramsField}
+                activeProductField={activeProductField}
+                activeGramsField={activeGramsField}
+                productSuggestions={getProductSuggestions}
+                gramSuggestions={getGramSuggestions}
+                recentTopGrams={recentGrams[0] ?? 0}
+                mealLabel={mealLabel}
+              />
+            ))}
           </View>
         )}
       </ScrollView>
 
-      {/* Row actions modal */}
-      <Modal visible={!!actionModalDayId} animationType="fade" transparent>
-        <Pressable style={g.modalOverlay} onPress={() => setActionModalDayId(null)}>
-          <Pressable style={[g.modal, s.actionsModal]} onPress={(e) => e.stopPropagation()}>
-            <Text style={g.modalTitle}>{t("dataRowActions")}</Text>
-            {actionDay && (
-              <Text style={[g.labelMuted, { marginBottom: 12 }]}>
-                {formatDateShort(actionDay.date, locale)}
-              </Text>
-            )}
-            <TouchableOpacity
-              style={[s.actionModalBtn, { backgroundColor: colors.chipBg }]}
-              onPress={() => actionModalDayId && handleMoveUp(actionModalDayId)}
-            >
-              <Text style={[s.actionModalBtnText, { color: colors.text }]}>↑ {t("dataMoveUp")}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.actionModalBtn, { backgroundColor: colors.chipBg }]}
-              onPress={() => actionModalDayId && handleMoveDown(actionModalDayId)}
-            >
-              <Text style={[s.actionModalBtnText, { color: colors.text }]}>↓ {t("dataMoveDown")}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.actionModalBtn, { backgroundColor: colors.chipBg }]}
-              onPress={() => actionModalDayId && handleInsertAbove(actionModalDayId)}
-            >
-              <Text style={[s.actionModalBtnText, { color: colors.text }]}>+ {t("dataAddAbove")}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.actionModalBtn, { backgroundColor: colors.chipBg }]}
-              onPress={() => actionModalDayId && handleInsertBelow(actionModalDayId)}
-            >
-              <Text style={[s.actionModalBtnText, { color: colors.text }]}>+ {t("dataAddBelow")}</Text>
-            </TouchableOpacity>
-            {actionDay && actionDay.morning.length === 0 && (
-              <TouchableOpacity
-                style={[s.actionModalBtn, { backgroundColor: colors.chipBg }]}
-                onPress={() => {
-                  openAddProduct(actionDay.id, "morning");
-                  setActionModalDayId(null);
-                }}
-              >
-                <Text style={[s.actionModalBtnText, { color: colors.text }]}>+ {t("mealMorning")}</Text>
-              </TouchableOpacity>
-            )}
-            {actionDay && actionDay.lunch.length === 0 && (
-              <TouchableOpacity
-                style={[s.actionModalBtn, { backgroundColor: colors.chipBg }]}
-                onPress={() => {
-                  openAddProduct(actionDay.id, "lunch");
-                  setActionModalDayId(null);
-                }}
-              >
-                <Text style={[s.actionModalBtnText, { color: colors.text }]}>+ {t("mealLunch")}</Text>
-              </TouchableOpacity>
-            )}
-            {actionDay && actionDay.evening.length === 0 && (
-              <TouchableOpacity
-                style={[s.actionModalBtn, { backgroundColor: colors.chipBg }]}
-                onPress={() => {
-                  openAddProduct(actionDay.id, "evening");
-                  setActionModalDayId(null);
-                }}
-              >
-                <Text style={[s.actionModalBtnText, { color: colors.text }]}>+ {t("mealEvening")}</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={[s.actionModalBtn, { backgroundColor: colors.pastelRed }]}
-              onPress={() => actionModalDayId && handleDeleteDay(actionModalDayId)}
-            >
-              <Text style={[s.actionModalBtnText, { color: colors.text }]}>{t("dataDeleteRow")}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.actionModalBtn, { backgroundColor: colors.secondaryBtn, marginTop: 8 }]}
-              onPress={() => setActionModalDayId(null)}
-            >
-              <Text style={[s.actionModalBtnText, { color: colors.text }]}>{t("cancel")}</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <RowActionsModal
+        dayId={actionModalDayId}
+        day={actionDay}
+        styles={s}
+        globalStyles={g}
+        colors={colors}
+        locale={locale}
+        t={t}
+        onClose={() => setActionModalDayId(null)}
+        onMoveUp={handleMoveUp}
+        onMoveDown={handleMoveDown}
+        onInsertAbove={handleInsertAbove}
+        onInsertBelow={handleInsertBelow}
+        onAddMeal={(day, mealType) => {
+          openAddProduct(day.id, mealType);
+          setActionModalDayId(null);
+        }}
+        onDelete={handleDeleteDay}
+      />
 
-      {/* Add product modal */}
-      <Modal visible={!!addProductModal} animationType="slide" transparent>
-        <Pressable style={g.modalOverlay} onPress={() => setAddProductModal(null)}>
-          <Pressable style={g.modal} onPress={(e) => e.stopPropagation()}>
-            <Text style={g.modalTitle}>
-              {t("dataAddProduct")} — {addProductModal ? mealLabel(addProductModal.mealType) : ""}
-            </Text>
-            <TextInput
-              style={[g.input, { color: colors.text, marginBottom: 12 }]}
-              value={newProduct}
-              onChangeText={setNewProduct}
-              onFocus={() => setActiveProductField("modal")}
-              placeholder={t("product")}
-              placeholderTextColor={colors.placeholder}
-              autoFocus
-            />
-            <View style={s.modalSuggestionsRow}>
-              {getProductSuggestions(newProduct).map((suggestion) => (
-                <TouchableOpacity
-                  key={`modal-product-${suggestion}`}
-                  style={[s.suggestionChip, { backgroundColor: colors.chipBg }]}
-                  onPress={() => setNewProduct(suggestion)}
-                >
-                  <Text style={[s.suggestionChipText, { color: colors.text }]}>{suggestion}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <TextInput
-              style={[g.input, { color: colors.text, marginBottom: 12 }]}
-              value={newGrams}
-              onChangeText={setNewGrams}
-              onFocus={() => setActiveGramsField("modal")}
-              placeholder={`${t("dataAmount")} (${t("grams")})`}
-              placeholderTextColor={colors.placeholder}
-              keyboardType="numeric"
-            />
-            <View style={s.modalSuggestionsRow}>
-              {getGramSuggestions(newGrams, recentGrams[0] ?? 0).map((gram) => (
-                <TouchableOpacity
-                  key={`modal-gram-${gram}`}
-                  style={[s.gramChip, { backgroundColor: colors.chipBg }]}
-                  onPress={() => setNewGrams(String(gram))}
-                >
-                  <Text style={[s.gramChipText, { color: colors.text }]}>{gram}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={g.modalButtons}>
-              <TouchableOpacity style={g.cancelBtn} onPress={() => setAddProductModal(null)}>
-                <Text style={g.cancelBtnText}>{t("cancel")}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[g.saveBtn, !newProduct.trim() && g.buttonDisabled]}
-                onPress={confirmAddProduct}
-                disabled={!newProduct.trim()}
-              >
-                <Text style={g.saveBtnText}>{t("add")}</Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <AddProductModal
+        visible={!!addProductModal}
+        mealType={addProductModal?.mealType ?? null}
+        styles={s}
+        globalStyles={g}
+        colors={colors}
+        t={t}
+        mealLabel={mealLabel}
+        product={newProduct}
+        grams={newGrams}
+        onProductChange={setNewProduct}
+        onGramsChange={setNewGrams}
+        onFocusProductField={() => setActiveProductField("modal")}
+        onFocusGramsField={() => setActiveGramsField("modal")}
+        productSuggestions={modalProductSuggestions}
+        gramSuggestions={modalGramSuggestions}
+        onClose={() => setAddProductModal(null)}
+        onConfirm={confirmAddProduct}
+      />
 
-      <Modal visible={startDateModalVisible} animationType="fade" transparent>
-        <Pressable style={g.modalOverlay} onPress={() => setStartDateModalVisible(false)}>
-          <Pressable style={g.modal} onPress={(e) => e.stopPropagation()}>
-            <Text style={g.modalTitle}>{t("dataStartDateTitle")}</Text>
-            <Text style={[g.labelMuted, { marginBottom: 10 }]}>{t("dataStartDateHint")}</Text>
-            <TextInput
-              style={[g.input, { color: colors.text, marginBottom: 12 }]}
-              value={newStartDate}
-              onChangeText={setNewStartDate}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={colors.placeholder}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <View style={g.modalButtons}>
-              <TouchableOpacity style={g.cancelBtn} onPress={() => setStartDateModalVisible(false)}>
-                <Text style={g.cancelBtnText}>{t("cancel")}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={g.saveBtn} onPress={handleApplyStartDate}>
-                <Text style={g.saveBtnText}>{t("save")}</Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <ShiftStartDateModal
+        visible={startDateModalVisible}
+        value={newStartDate}
+        globalStyles={g}
+        colors={colors}
+        t={t}
+        onChange={setNewStartDate}
+        onClose={() => setStartDateModalVisible(false)}
+        onApply={handleApplyStartDate}
+      />
 
       <Modal visible={!!toast} animationType="none" transparent statusBarTranslucent>
         <View style={s.toastLayer} pointerEvents="none">
@@ -740,227 +405,16 @@ export function DataScreen() {
               style={[
                 s.toast,
                 { top: insets.top + 8 },
-                toast.kind === "success"
+                toast.value.kind === "success"
                   ? { backgroundColor: colors.pastelGreen, borderColor: colors.primary }
                   : { backgroundColor: colors.pastelRed, borderColor: colors.danger },
               ]}
             >
-              <Text style={[s.toastText, { color: colors.text }]}>{toast.text}</Text>
+              <Text style={[s.toastText, { color: colors.text }]}>{toast.value.text}</Text>
             </View>
           )}
         </View>
       </Modal>
     </View>
-  );
-}
-
-function useStyles(colors: {
-  card: string;
-  text: string;
-  textMuted: string;
-  primary: string;
-  chipBg: string;
-  border: string;
-  borderLight: string;
-  danger: string;
-  pastelGreen: string;
-  pastelRed: string;
-}, width: number) {
-  const compact = width < 400;
-  return React.useMemo(
-    () =>
-      StyleSheet.create({
-        center: { flex: 1, justifyContent: "center", alignItems: "center" },
-        toolbar: {
-          flexDirection: "row",
-          gap: compact ? 6 : 8,
-          paddingHorizontal: spacing.screenPadding,
-          marginBottom: 12,
-          flexWrap: "wrap",
-        },
-        toolBtn: {
-          paddingVertical: compact ? 9 : 10,
-          paddingHorizontal: compact ? 12 : 14,
-          borderRadius: spacing.radiusMd,
-        },
-        toolBtnText: {
-          fontSize: 13,
-          fontFamily: fonts.medium,
-        },
-        toolBtnTextWhite: {
-          fontSize: 13,
-          fontFamily: fonts.semiBold,
-          color: "#fff",
-        },
-        emptyWrap: {
-          alignItems: "center",
-          padding: 40,
-        },
-        emptyIcon: {
-          fontSize: 40,
-          marginBottom: 12,
-        },
-        cardsWrap: {
-          paddingHorizontal: spacing.screenPadding,
-          gap: 10,
-        },
-        dayCard: {
-          borderWidth: 1,
-          borderRadius: spacing.radiusMd,
-          padding: compact ? 8 : 10,
-          gap: 8,
-        },
-        dateRow: {
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 8,
-        },
-        cellInput: {
-          borderWidth: 1,
-          borderRadius: spacing.radiusSm,
-          paddingVertical: compact ? 5 : 6,
-          paddingHorizontal: compact ? 7 : 8,
-          fontSize: 13,
-          fontFamily: fonts.regular,
-        },
-        cellDate: { flex: 1 },
-        cellProduct: { flex: 1, minWidth: 0 },
-        cardGramsInput: { width: 64, textAlign: "right" },
-        cellNotes: { width: "100%", minHeight: 36 },
-        mealSection: {
-          gap: 4,
-        },
-        mealTitle: {
-          fontSize: 12,
-          fontFamily: fonts.medium,
-        },
-        mealEntryRow: {
-          flexDirection: "row",
-          alignItems: "center",
-          width: "100%",
-          gap: 6,
-          marginBottom: 2,
-          flexWrap: "wrap",
-        },
-        removeEntryBtn: {
-          width: 22,
-          height: 22,
-          flexShrink: 0,
-          alignItems: "center",
-          justifyContent: "center",
-        },
-        removeEntryText: {
-          fontSize: 16,
-          fontWeight: "bold",
-        },
-        addEntryBtn: {
-          borderWidth: 1,
-          borderStyle: "dashed",
-          borderRadius: spacing.radiusSm,
-          paddingVertical: 6,
-          alignItems: "center",
-        },
-        addEntryText: {
-          fontSize: 16,
-          fontFamily: fonts.medium,
-        },
-        addMoreBtn: {
-          paddingVertical: 3,
-          alignItems: "center",
-        },
-        addMoreText: {
-          fontSize: 12,
-          fontFamily: fonts.medium,
-        },
-        suggestionsWrap: {
-          flexDirection: "row",
-          flexWrap: "wrap",
-          gap: 4,
-          borderRadius: spacing.radiusSm,
-          padding: 4,
-          width: "100%",
-          marginTop: 4,
-          maxHeight: 84,
-          overflow: "hidden",
-        },
-        inlineSuggestionsRow: {
-          flexDirection: "row",
-          flexWrap: "wrap",
-          gap: 4,
-          marginTop: 2,
-          marginBottom: 4,
-        },
-        modalSuggestionsRow: {
-          flexDirection: "row",
-          flexWrap: "wrap",
-          gap: 6,
-          marginBottom: 12,
-        },
-        suggestionChip: {
-          borderRadius: spacing.radiusSm,
-          paddingHorizontal: 8,
-          paddingVertical: 5,
-        },
-        suggestionChipText: {
-          fontSize: 12,
-          fontFamily: fonts.medium,
-        },
-        gramChip: {
-          borderRadius: spacing.radiusSm,
-          paddingHorizontal: 8,
-          paddingVertical: 5,
-        },
-        gramChipText: {
-          fontSize: 12,
-          fontFamily: fonts.medium,
-        },
-        rowActionsBtn: {
-          width: 34,
-          height: 34,
-          borderRadius: spacing.radiusSm,
-          borderWidth: 1,
-          alignItems: "center",
-          justifyContent: "center",
-        },
-        rowActionsIcon: {
-          fontSize: 14,
-          fontFamily: fonts.semiBold,
-        },
-        actionsModal: {
-          gap: 8,
-        },
-        actionModalBtn: {
-          paddingVertical: 14,
-          paddingHorizontal: 16,
-          borderRadius: spacing.radiusMd,
-          alignItems: "center",
-        },
-        actionModalBtnText: {
-          fontSize: 15,
-          fontFamily: fonts.medium,
-        },
-        toast: {
-          position: "absolute",
-          alignSelf: "center",
-          width: "92%",
-          maxWidth: 460,
-          borderWidth: 1,
-          borderRadius: spacing.radiusMd,
-          paddingVertical: 10,
-          paddingHorizontal: 12,
-          zIndex: 1000,
-          elevation: 1000,
-        },
-        toastLayer: {
-          flex: 1,
-          width: "100%",
-        },
-        toastText: {
-          fontSize: 13,
-          fontFamily: fonts.medium,
-          textAlign: "center",
-        },
-      }),
-    [colors, compact],
   );
 }

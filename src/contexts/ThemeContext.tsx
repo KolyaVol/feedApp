@@ -1,8 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { getColors, type ThemeMode } from "../theme";
 import type { ColorSet } from "../theme";
-import { KEYS } from "../data/storageKeys";
+import { getTheme as loadTheme, setTheme as persistTheme } from "../data/settings";
 
 type ThemeContextValue = {
   theme: ThemeMode;
@@ -16,15 +22,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>("light");
 
   useEffect(() => {
-    AsyncStorage.getItem(KEYS.THEME).then((stored) => {
-      if (stored === "dark" || stored === "light") setThemeState(stored);
-    });
+    loadTheme().then(setThemeState);
   }, []);
 
-  const setTheme = (mode: ThemeMode) => {
+  const setTheme = useCallback((mode: ThemeMode) => {
     setThemeState(mode);
-    AsyncStorage.setItem(KEYS.THEME, mode);
-  };
+    void persistTheme(mode);
+  }, []);
 
   const value = useMemo<ThemeContextValue>(
     () => ({
@@ -32,7 +36,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setTheme,
       colors: getColors(theme),
     }),
-    [theme],
+    [theme, setTheme],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

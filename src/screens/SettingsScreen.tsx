@@ -7,10 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  Modal,
-  Pressable,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import * as DocumentPicker from "expo-document-picker";
@@ -24,11 +21,13 @@ import {
   getLastSyncAt,
 } from "../data/settings";
 import { getFeedDays } from "../data/feedDays";
-import type { FeedDay } from "../types";
+import { parseFeedDaysStrict } from "../data/schemas";
 import { useFeedDaysContext } from "../contexts/FeedDaysContext";
+import { ScreenTitle } from "../components/ScreenTitle";
+import { ModalSheet } from "../components/ModalSheet";
+import { useToast } from "../hooks/useToast";
 
 export function SettingsScreen() {
-  const insets = useSafeAreaInsets();
   const g = useGlobalStyles();
   const { t, locale, setLocale } = useLocale();
   const { theme, setTheme, colors } = useTheme();
@@ -37,18 +36,13 @@ export function SettingsScreen() {
 
   const [githubToken, setGithubToken] = useState("");
   const [lastSync, setLastSync] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const { toast, show: showToast } = useToast<string>(2500);
   const [replaceModalVisible, setReplaceModalVisible] = useState(false);
   const [replacingFromGithub, setReplacingFromGithub] = useState(false);
 
   useEffect(() => {
     getGithubToken().then(setGithubToken);
     getLastSyncAt().then(setLastSync);
-  }, []);
-
-  const showToast = useCallback((text: string) => {
-    setToast(text);
-    setTimeout(() => setToast(null), 2500);
   }, []);
 
   const handleSaveToken = useCallback(async () => {
@@ -80,13 +74,13 @@ export function SettingsScreen() {
       const importedFile = new File(uri);
       const content = await importedFile.text();
       const parsed = JSON.parse(content) as unknown;
-      if (!Array.isArray(parsed)) {
-        Alert.alert(t("error"), t("settingsImportError"));
+      const validation = parseFeedDaysStrict(parsed);
+      if (!validation.ok) {
+        Alert.alert(t("error"), `${t("settingsImportError")}: ${validation.message}`);
         return;
       }
-      const days = parsed as FeedDay[];
-      await replaceAll(days);
-      showToast(t("settingsImportSuccess", { count: days.length }));
+      await replaceAll(validation.days);
+      showToast(t("settingsImportSuccess", { count: validation.days.length }));
     } catch (e: any) {
       Alert.alert(t("error"), e?.message ?? t("settingsImportError"));
     }
@@ -107,9 +101,7 @@ export function SettingsScreen() {
 
   return (
     <ScrollView style={g.screenContainer} contentContainerStyle={g.screenContent}>
-      <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>
-        {t("titleSettings")}
-      </Text>
+      <ScreenTitle>{t("titleSettings")}</ScreenTitle>
 
       {/* Theme */}
       <View style={[s.card, { backgroundColor: colors.card }]}>
@@ -224,38 +216,37 @@ export function SettingsScreen() {
 
       {toast && (
         <View style={[s.toast, { backgroundColor: colors.pastelGreen }]}>
-          <Text style={[s.toastText, { color: colors.text }]}>{toast}</Text>
+          <Text style={[s.toastText, { color: colors.text }]}>{toast.value}</Text>
         </View>
       )}
 
-      <Modal visible={replaceModalVisible} animationType="fade" transparent>
-        <Pressable style={g.modalOverlay} onPress={() => setReplaceModalVisible(false)}>
-          <Pressable style={g.modal} onPress={(e) => e.stopPropagation()}>
-            <Text style={g.modalTitle}>{t("settingsReplaceFromGithubTitle")}</Text>
-            <Text style={[g.labelMuted, { marginBottom: 12 }]}>
-              {t("settingsReplaceFromGithubWarning")}
+      <ModalSheet
+        visible={replaceModalVisible}
+        onRequestClose={() => setReplaceModalVisible(false)}
+      >
+        <Text style={g.modalTitle}>{t("settingsReplaceFromGithubTitle")}</Text>
+        <Text style={[g.labelMuted, { marginBottom: 12 }]}>
+          {t("settingsReplaceFromGithubWarning")}
+        </Text>
+        <View style={g.modalButtons}>
+          <TouchableOpacity
+            style={g.cancelBtn}
+            onPress={() => setReplaceModalVisible(false)}
+            disabled={replacingFromGithub}
+          >
+            <Text style={g.cancelBtnText}>{t("cancel")}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[g.saveBtn, replacingFromGithub && g.buttonDisabled]}
+            onPress={handleReplaceFromGithub}
+            disabled={replacingFromGithub}
+          >
+            <Text style={g.saveBtnText}>
+              {replacingFromGithub ? t("settingsReplacingFromGithub") : t("settingsConfirmReplace")}
             </Text>
-            <View style={g.modalButtons}>
-              <TouchableOpacity
-                style={g.cancelBtn}
-                onPress={() => setReplaceModalVisible(false)}
-                disabled={replacingFromGithub}
-              >
-                <Text style={g.cancelBtnText}>{t("cancel")}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[g.saveBtn, replacingFromGithub && g.buttonDisabled]}
-                onPress={handleReplaceFromGithub}
-                disabled={replacingFromGithub}
-              >
-                <Text style={g.saveBtnText}>
-                  {replacingFromGithub ? t("settingsReplacingFromGithub") : t("settingsConfirmReplace")}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </TouchableOpacity>
+        </View>
+      </ModalSheet>
     </ScrollView>
   );
 }

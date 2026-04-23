@@ -4,10 +4,8 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useFeedDays } from "../hooks/useFeedDays";
 import { useFeedStats, type FeedStatsOptions } from "../hooks/useFeedStats";
@@ -16,18 +14,15 @@ import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLocale } from "../contexts/LocaleContext";
 import { fonts, spacing } from "../theme";
+import { formatIsoDateShort } from "../utils/dates";
+import { ScreenTitle } from "../components/ScreenTitle";
+import { CenteredLoader } from "../components/CenteredLoader";
 
 type RangeOption = { label: string; value: number | null };
 
-function formatShort(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-}
-
 export function StatisticsScreen() {
-  const insets = useSafeAreaInsets();
   const g = useGlobalStyles();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const { colors } = useTheme();
   const s = useStyles(colors);
   const { days, loading, refresh } = useFeedDays();
@@ -55,18 +50,12 @@ export function StatisticsScreen() {
   const stats = useFeedStats(days, statsOptions);
 
   if (loading) {
-    return (
-      <View style={[g.screenContainer, s.center]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
+    return <CenteredLoader />;
   }
 
   return (
     <ScrollView style={g.screenContainer} contentContainerStyle={g.screenContent}>
-      <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>
-        {t("titleStats")}
-      </Text>
+      <ScreenTitle>{t("titleStats")}</ScreenTitle>
 
       {/* Range selector */}
       <ScrollView
@@ -173,7 +162,7 @@ export function StatisticsScreen() {
           {stats.weeklyBreakdown.map((week) => (
             <View key={week.weekLabel} style={[s.weekCard, { backgroundColor: colors.card }]}>
               <Text style={[s.weekTitle, { color: colors.text }]}>
-                {t("statsWeekOf")} {formatShort(week.weekLabel)}
+                {t("statsWeekOf")} {formatIsoDateShort(week.weekLabel, locale)}
               </Text>
               <Text style={[s.weekTotal, { color: colors.textMuted }]}>
                 {week.totalGrams}{t("grams")}
@@ -181,7 +170,7 @@ export function StatisticsScreen() {
               {week.days.map((d, idx) => (
                 <View key={`${d.date}-${d.product}-${idx}`} style={s.weekDayRow}>
                   <Text style={[s.weekDayDate, { color: colors.textMuted }]}>
-                    {formatShort(d.date)}
+                    {formatIsoDateShort(d.date, locale)}
                   </Text>
                   <Text style={[s.weekDayFood, { color: colors.text }]}>{d.product}</Text>
                   <Text style={[s.weekDayAmount, { color: colors.text }]}>
@@ -207,7 +196,6 @@ function useStyles(colors: {
   return React.useMemo(
     () =>
       StyleSheet.create({
-        center: { flex: 1, justifyContent: "center", alignItems: "center" },
         rangeRow: {
           paddingHorizontal: spacing.screenPadding,
           gap: 8,

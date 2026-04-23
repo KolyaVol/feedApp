@@ -20,14 +20,10 @@ import {
   formatDateStr,
   addDaysToDate,
 } from "../data/feedDays";
-import { pullFeedDays, pushFeedDays, type SyncResult } from "../remoteFeed/sync";
-import { getGithubToken } from "../data/settings";
+import { pullFeedDays, type SyncResult } from "../remoteFeed/sync";
+import { useSyncController, type SyncError } from "../hooks/useSyncController";
 
-export interface SyncError {
-  id: number;
-  text: string;
-  conflict?: boolean;
-}
+export type { SyncError };
 
 export interface FeedDaysContextValue {
   days: FeedDay[];
@@ -49,114 +45,47 @@ export interface FeedDaysContextValue {
 
 const FeedDaysContext = createContext<FeedDaysContextValue | null>(null);
 
-const AUTO_PUSH_DEBOUNCE_MS = 4000;
-const ERROR_COOLDOWN_MS = 10_000;
-const MAX_CONSECUTIVE_FAILURES = 3;
-
 export function FeedDaysProvider({ children }: { children: React.ReactNode }) {
   const [days, setDays] = useState<FeedDay[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [lastError, setLastError] = useState<SyncError | null>(null);
 
   const snapshot = useMemo(() => JSON.stringify(days), [days]);
   const latestDaysRef = useRef(days);
   const latestSnapshotRef = useRef(snapshot);
-  const lastPushedSnapshotRef = useRef<string>("");
   const initializedRef = useRef(false);
-
-  const autoPushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const failureCountRef = useRef(0);
-  const cooldownUntilRef = useRef(0);
-  const errorIdRef = useRef(0);
-  const pushingRef = useRef(false);
-  const skipNextAutoPushRef = useRef(false);
 
   useEffect(() => {
     latestDaysRef.current = days;
     latestSnapshotRef.current = snapshot;
   }, [days, snapshot]);
 
+  const sync = useSyncController(
+    useCallback(
+      () => ({ days: latestDaysRef.current, snapshot: latestSnapshotRef.current }),
+      [],
+    ),
+  );
+  const { raiseError, setInitialSnapshot } = sync;
+
   const refresh = useCallback(async () => {
     if (!initializedRef.current) setLoading(true);
     const list = await getFeedDays();
     setDays(list);
     if (!initializedRef.current) {
-      const snap = JSON.stringify(list);
-      lastPushedSnapshotRef.current = snap;
+      setInitialSnapshot(JSON.stringify(list));
       initializedRef.current = true;
       setLoading(false);
     }
-  }, []);
+  }, [setInitialSnapshot]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  const raiseError = useCallback((text: string, conflict?: boolean) => {
-    errorIdRef.current += 1;
-    setLastError({ id: errorIdRef.current, text, conflict });
-  }, []);
-
-  const clearError = useCallback(() => {
-    setLastError(null);
-  }, []);
-
-  const runPush = useCallback(
-    async (options?: { manual?: boolean }): Promise<SyncResult> => {
-      if (pushingRef.current) {
-        return { ok: false, text: "Push already in progress." };
-      }
-      const token = await getGithubToken();
-      if (!token) return { ok: false, text: "GitHub token not configured." };
-
-      pushingRef.current = true;
-      setSyncing(true);
-      const snapshotBeforePush = latestSnapshotRef.current;
-      try {
-        const result = await pushFeedDays(latestDaysRef.current);
-        if (result.ok) {
-          lastPushedSnapshotRef.current = snapshotBeforePush;
-          failureCountRef.current = 0;
-          cooldownUntilRef.current = 0;
-        } else {
-          failureCountRef.current += 1;
-          cooldownUntilRef.current = Date.now() + ERROR_COOLDOWN_MS;
-          if (options?.manual || failureCountRef.current <= 1) {
-            raiseError(result.text, result.conflict);
-          }
-        }
-        return result;
-      } finally {
-        pushingRef.current = false;
-        setSyncing(false);
-      }
-    },
-    [raiseError],
-  );
-
   useEffect(() => {
     if (!initializedRef.current) return;
-    if (skipNextAutoPushRef.current) {
-      skipNextAutoPushRef.current = false;
-      lastPushedSnapshotRef.current = snapshot;
-      return;
-    }
-    if (snapshot === lastPushedSnapshotRef.current) return;
-    if (failureCountRef.current >= MAX_CONSECUTIVE_FAILURES) return;
-
-    if (autoPushTimeoutRef.current) clearTimeout(autoPushTimeoutRef.current);
-    const delay = Math.max(AUTO_PUSH_DEBOUNCE_MS, cooldownUntilRef.current - Date.now());
-    autoPushTimeoutRef.current = setTimeout(() => {
-      if (pushingRef.current) return;
-      if (latestSnapshotRef.current === lastPushedSnapshotRef.current) return;
-      void runPush();
-    }, delay);
-
-    return () => {
-      if (autoPushTimeoutRef.current) clearTimeout(autoPushTimeoutRef.current);
-    };
-  }, [snapshot, runPush]);
+    sync.notifyChange(snapshot);
+  }, [snapshot, sync]);
 
   const addDay = useCallback(
     async (day?: Omit<FeedDay, "id">): Promise<FeedDay> => {
@@ -240,38 +169,29 @@ export function FeedDaysProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  const pullNow = useCallback(async (): Promise<SyncResult> => {
-    setSyncing(true);
-    try {
-      const result = await pullFeedDays();
-      if (result.ok && result.days) {
-        skipNextAutoPushRef.current = true;
-        await setFeedDays(result.days);
-        setDays(result.days);
-        lastPushedSnapshotRef.current = JSON.stringify(result.days);
-        failureCountRef.current = 0;
-        cooldownUntilRef.current = 0;
-      } else if (!result.ok) {
-        raiseError(result.text);
-      }
-      return result;
-    } finally {
-      setSyncing(false);
-    }
-  }, [raiseError]);
-
-  const pushNow = useCallback(async (): Promise<SyncResult> => {
-    failureCountRef.current = 0;
-    cooldownUntilRef.current = 0;
-    return runPush({ manual: true });
-  }, [runPush]);
+  const pullNow = useCallback(
+    (): Promise<SyncResult> =>
+      sync.runWithSyncing(async () => {
+        const result = await pullFeedDays();
+        if (result.ok && result.days) {
+          sync.requestSkipNextAutoPush();
+          await setFeedDays(result.days);
+          setDays(result.days);
+          sync.markSnapshotPushed(JSON.stringify(result.days));
+        } else if (!result.ok) {
+          raiseError(result.text);
+        }
+        return result;
+      }),
+    [sync, raiseError],
+  );
 
   const value = useMemo<FeedDaysContextValue>(
     () => ({
       days,
       loading,
-      syncing,
-      lastError,
+      syncing: sync.syncing,
+      lastError: sync.lastError,
       refresh,
       addDay,
       insertDayAt,
@@ -281,14 +201,16 @@ export function FeedDaysProvider({ children }: { children: React.ReactNode }) {
       replaceAll,
       toggleEaten,
       pullNow,
-      pushNow,
-      clearError,
+      pushNow: sync.pushNow,
+      clearError: sync.clearError,
     }),
     [
       days,
       loading,
-      syncing,
-      lastError,
+      sync.syncing,
+      sync.lastError,
+      sync.pushNow,
+      sync.clearError,
       refresh,
       addDay,
       insertDayAt,
@@ -298,8 +220,6 @@ export function FeedDaysProvider({ children }: { children: React.ReactNode }) {
       replaceAll,
       toggleEaten,
       pullNow,
-      pushNow,
-      clearError,
     ],
   );
 

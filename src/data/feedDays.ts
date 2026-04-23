@@ -2,14 +2,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { FeedDay } from "../types";
 import { KEYS } from "./storageKeys";
 import { generateId } from "../utils/id";
+import { parseFeedDaysLoose } from "./schemas";
 
 export async function getFeedDays(): Promise<FeedDay[]> {
   try {
     const raw = await AsyncStorage.getItem(KEYS.FEED_DAYS);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isValidFeedDay);
+    return parseFeedDaysLoose(parsed);
   } catch {
     return [];
   }
@@ -78,27 +78,4 @@ export function createEmptyFeedDay(date: string): Omit<FeedDay, "id"> {
   };
 }
 
-export function formatDateStr(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-export function addDaysToDate(dateStr: string, count: number): string {
-  const d = new Date(dateStr + "T00:00:00");
-  d.setDate(d.getDate() + count);
-  return formatDateStr(d);
-}
-
-function isValidFeedDay(v: unknown): v is FeedDay {
-  if (!v || typeof v !== "object") return false;
-  const obj = v as Record<string, unknown>;
-  return (
-    typeof obj.id === "string" &&
-    typeof obj.date === "string" &&
-    Array.isArray(obj.morning) &&
-    Array.isArray(obj.lunch) &&
-    Array.isArray(obj.evening)
-  );
-}
+export { formatIsoDate as formatDateStr, addDaysIso as addDaysToDate } from "../utils/dates";

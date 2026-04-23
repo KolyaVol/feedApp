@@ -8,15 +8,14 @@ import {
   TouchableOpacity,
   RefreshControl,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBestPractices } from "../hooks/useBestPractices";
 import { useGlobalStyles } from "../globalStyles";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLocale } from "../contexts/LocaleContext";
 import { fonts, spacing } from "../theme";
+import { ScreenTitle } from "../components/ScreenTitle";
 
 export function BestPracticesScreen() {
-  const insets = useSafeAreaInsets();
   const g = useGlobalStyles();
   const { t } = useLocale();
   const { colors } = useTheme();
@@ -39,9 +38,7 @@ export function BestPracticesScreen() {
         contentContainerStyle={[g.screenContent, s.center]}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} />}
       >
-        <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>
-          {t("titleGuide")}
-        </Text>
+        <ScreenTitle>{t("titleGuide")}</ScreenTitle>
         <View style={s.emptyWrap}>
           <Text style={s.emptyIcon}>📖</Text>
           <Text style={g.emptyText}>{error ?? t("guideNoData")}</Text>
@@ -62,9 +59,7 @@ export function BestPracticesScreen() {
       contentContainerStyle={g.screenContent}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} />}
     >
-      <Text style={[g.screenTitle, { paddingTop: insets.top + 8 }]}>
-        {t("titleGuide")}
-      </Text>
+      <ScreenTitle>{t("titleGuide")}</ScreenTitle>
 
       {/* Safety Tips */}
       {data.safetyTips.length > 0 && (

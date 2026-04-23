@@ -1,18 +1,21 @@
 import React, {
   createContext,
+  useCallback,
   useContext,
-  useState,
   useEffect,
   useMemo,
-  useCallback,
+  useState,
 } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { en } from "../i18n/en";
 import type { TranslationKey } from "../i18n/en";
 import { ru } from "../i18n/ru";
-import { KEYS } from "../data/storageKeys";
+import {
+  getLocale as loadLocale,
+  setLocale as persistLocale,
+  type LocaleCode,
+} from "../data/settings";
 
-export type Locale = "en" | "ru";
+export type Locale = LocaleCode;
 
 const translations: Record<Locale, Record<TranslationKey, string>> = { en, ru };
 
@@ -35,17 +38,15 @@ type LocaleContextValue = {
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>("en");
+  const [locale, setLocaleState] = useState<Locale>("ru");
 
   useEffect(() => {
-    AsyncStorage.getItem(KEYS.LOCALE).then((stored) => {
-      if (stored === "en" || stored === "ru") setLocaleState(stored);
-    });
+    loadLocale().then(setLocaleState);
   }, []);
 
   const setLocale = useCallback((value: Locale) => {
     setLocaleState(value);
-    AsyncStorage.setItem(KEYS.LOCALE, value);
+    void persistLocale(value);
   }, []);
 
   const t = useCallback(

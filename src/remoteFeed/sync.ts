@@ -1,5 +1,6 @@
 import type { FeedDay } from "../types";
 import { getGithubToken, setLastSyncAt } from "../data/settings";
+import { parseFeedDaysStrict } from "../data/schemas";
 import {
   GITHUB_BRANCH,
   GITHUB_USER_JSON_PATH,
@@ -139,11 +140,12 @@ export async function pullFeedDays(): Promise<SyncResult> {
   }
   try {
     const parsed = JSON.parse(res.data!.text) as unknown;
-    if (!Array.isArray(parsed)) {
-      return { ok: false, text: "Remote data is not a valid FeedDay array." };
+    const validation = parseFeedDaysStrict(parsed);
+    if (!validation.ok) {
+      return { ok: false, text: `Remote data invalid: ${validation.message}` };
     }
     await setLastSyncAt(new Date().toISOString());
-    return { ok: true, text: "Pulled successfully.", days: parsed as FeedDay[] };
+    return { ok: true, text: "Pulled successfully.", days: validation.days };
   } catch (e: any) {
     return { ok: false, text: `Invalid remote JSON: ${e?.message ?? "parse error"}` };
   }

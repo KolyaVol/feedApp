@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { FeedDay, AggregatedFood, MealEntry } from "../types";
 import { foodTypePresetColors } from "../theme";
+import { startOfIsoWeekMonday } from "../utils/dates";
 
 const colorCache: Record<string, string> = {};
 let colorIdx = 0;
@@ -92,11 +93,7 @@ export function computeStats(
 
   const weekMap = new Map<string, { totalGrams: number; days: { date: string; product: string; grams: number }[] }>();
   for (const day of filtered) {
-    const d = new Date(day.date + "T00:00:00");
-    const weekStart = new Date(d);
-    const dow = weekStart.getDay();
-    weekStart.setDate(weekStart.getDate() - (dow === 0 ? 6 : dow - 1));
-    const label = weekStart.toISOString().slice(0, 10);
+    const label = startOfIsoWeekMonday(day.date);
     const entry = weekMap.get(label) ?? { totalGrams: 0, days: [] };
     for (const meal of allMeals(day)) {
       if (!meal.product.trim()) continue;
