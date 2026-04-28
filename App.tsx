@@ -75,6 +75,7 @@ function AppTabs() {
   return (
     <>
       <Tab.Navigator
+        initialRouteName="Data"
         screenOptions={{
           headerShown: false,
           tabBarActiveTintColor: colors.primary,

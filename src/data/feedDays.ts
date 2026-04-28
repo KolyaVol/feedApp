@@ -71,8 +71,8 @@ export async function moveFeedDay(
 export function createEmptyFeedDay(date: string): Omit<FeedDay, "id"> {
   return {
     date,
-    morning: [],
-    lunch: [],
+    morning: [{ product: "", grams: 0 }],
+    lunch: [{ product: "", grams: 0 }],
     evening: [],
     notes: "",
   };

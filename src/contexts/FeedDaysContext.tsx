@@ -11,7 +11,6 @@ import type { FeedDay, MealType } from "../types";
 import {
   getFeedDays,
   setFeedDays,
-  addFeedDay as addFeedDayStorage,
   insertFeedDayAt as insertFeedDayAtStorage,
   updateFeedDay as updateFeedDayStorage,
   deleteFeedDay as deleteFeedDayStorage,
@@ -46,7 +45,14 @@ export interface FeedDaysContextValue {
 const FeedDaysContext = createContext<FeedDaysContextValue | null>(null);
 
 function sortDaysLatestFirst(days: FeedDay[]): FeedDay[] {
-  return [...days].sort((a, b) => b.date.localeCompare(a.date));
+  const today = formatDateStr(new Date());
+  return [...days].sort((a, b) => {
+    const aIsToday = a.date === today;
+    const bIsToday = b.date === today;
+    if (aIsToday && !bIsToday) return -1;
+    if (!aIsToday && bIsToday) return 1;
+    return b.date.localeCompare(a.date);
+  });
 }
 
 export function FeedDaysProvider({ children }: { children: React.ReactNode }) {
@@ -95,11 +101,11 @@ export function FeedDaysProvider({ children }: { children: React.ReactNode }) {
   const addDay = useCallback(
     async (day?: Omit<FeedDay, "id">): Promise<FeedDay> => {
       const current = await getFeedDays();
-      const ordered = sortDaysLatestFirst(current);
-      const latestDate = ordered.length
-        ? ordered[0]!.date
-        : formatDateStr(new Date());
-      const nextDate = ordered.length > 0 ? addDaysToDate(latestDate, 1) : latestDate;
+      const latestDate = current.reduce(
+        (max, item) => (item.date > max ? item.date : max),
+        formatDateStr(new Date()),
+      );
+      const nextDate = addDaysToDate(latestDate, 1);
       const newDay = day ?? createEmptyFeedDay(nextDate);
       const created = await insertFeedDayAtStorage(newDay, 0);
       const updated = sortDaysLatestFirst(await getFeedDays());

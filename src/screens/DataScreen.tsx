@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
+  Platform,
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -107,6 +108,16 @@ export function DataScreen() {
 
   const handleDeleteDay = useCallback(
     (id: string) => {
+      if (Platform.OS === "web") {
+        const ok = typeof globalThis.confirm === "function"
+          ? globalThis.confirm(t("dataConfirmDelete"))
+          : true;
+        if (ok) {
+          void deleteDay(id);
+          setActionModalDayId(null);
+        }
+        return;
+      }
       Alert.alert(t("dataConfirmDelete"), "", [
         { text: t("dataNo"), style: "cancel" },
         {
