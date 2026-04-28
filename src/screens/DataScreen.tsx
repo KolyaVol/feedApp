@@ -65,6 +65,7 @@ export function DataScreen() {
   const [activeProductField, setActiveProductField] = useState<string | null>(null);
   const [activeGramsField, setActiveGramsField] = useState<string | null>(null);
   const dateDrafts = useDateDrafts();
+  const oldestDay = days.length > 0 ? days[days.length - 1] : null;
 
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
 
@@ -122,9 +123,9 @@ export function DataScreen() {
   );
 
   const handleOpenStartDateModal = useCallback(() => {
-    setNewStartDate(days[0]?.date ?? formatDateStr(new Date()));
+    setNewStartDate(oldestDay?.date ?? formatDateStr(new Date()));
     setStartDateModalVisible(true);
-  }, [days]);
+  }, [oldestDay]);
 
   const handleApplyStartDate = useCallback(async () => {
     if (days.length === 0) return;
@@ -134,7 +135,8 @@ export function DataScreen() {
       return;
     }
     const targetDate = new Date(raw + "T00:00:00");
-    const currentStart = new Date(days[0].date + "T00:00:00");
+    if (!oldestDay) return;
+    const currentStart = new Date(oldestDay.date + "T00:00:00");
     if (isNaN(currentStart.getTime())) return;
     const deltaDays = Math.round(
       (targetDate.getTime() - currentStart.getTime()) / (24 * 60 * 60 * 1000),
@@ -146,7 +148,7 @@ export function DataScreen() {
     await replaceAll(shiftedDays);
     setStartDateModalVisible(false);
     showToast("success", t("settingsSaved"));
-  }, [days, newStartDate, replaceAll, showToast, t]);
+  }, [days, newStartDate, oldestDay, replaceAll, showToast, t]);
 
   const handleDateBlur = useCallback(
     (day: FeedDay) => {
@@ -278,15 +280,17 @@ export function DataScreen() {
           <TouchableOpacity style={[s.toolBtn, { backgroundColor: colors.primary }]} onPress={handleAddDay}>
             <Text style={s.toolBtnTextWhite}>+ {t("dataAddRow")}</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[s.toolBtn, { backgroundColor: colors.chipBg }]}
-            onPress={handlePull}
-            disabled={syncing || pulling}
-          >
-            <Text style={[s.toolBtnText, { color: colors.text }]}>
-              {pulling ? t("dataPulling") : t("dataPull")}
-            </Text>
-          </TouchableOpacity>
+          {locale === "en" && (
+            <TouchableOpacity
+              style={[s.toolBtn, { backgroundColor: colors.chipBg }]}
+              onPress={handlePull}
+              disabled={syncing || pulling}
+            >
+              <Text style={[s.toolBtnText, { color: colors.text }]}>
+                {pulling ? t("dataPulling") : t("dataPull")}
+              </Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[s.toolBtn, { backgroundColor: colors.chipBg }]}
             onPress={handleOpenStartDateModal}

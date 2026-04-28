@@ -45,6 +45,10 @@ export interface FeedDaysContextValue {
 
 const FeedDaysContext = createContext<FeedDaysContextValue | null>(null);
 
+function sortDaysLatestFirst(days: FeedDay[]): FeedDay[] {
+  return [...days].sort((a, b) => b.date.localeCompare(a.date));
+}
+
 export function FeedDaysProvider({ children }: { children: React.ReactNode }) {
   const [days, setDays] = useState<FeedDay[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,9 +74,10 @@ export function FeedDaysProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     if (!initializedRef.current) setLoading(true);
     const list = await getFeedDays();
-    setDays(list);
+    const ordered = sortDaysLatestFirst(list);
+    setDays(ordered);
     if (!initializedRef.current) {
-      setInitialSnapshot(JSON.stringify(list));
+      setInitialSnapshot(JSON.stringify(ordered));
       initializedRef.current = true;
       setLoading(false);
     }
@@ -90,13 +95,14 @@ export function FeedDaysProvider({ children }: { children: React.ReactNode }) {
   const addDay = useCallback(
     async (day?: Omit<FeedDay, "id">): Promise<FeedDay> => {
       const current = await getFeedDays();
-      const lastDate = current.length
-        ? current[current.length - 1]!.date
+      const ordered = sortDaysLatestFirst(current);
+      const latestDate = ordered.length
+        ? ordered[0]!.date
         : formatDateStr(new Date());
-      const nextDate = current.length > 0 ? addDaysToDate(lastDate, 1) : lastDate;
+      const nextDate = ordered.length > 0 ? addDaysToDate(latestDate, 1) : latestDate;
       const newDay = day ?? createEmptyFeedDay(nextDate);
-      const created = await addFeedDayStorage(newDay);
-      const updated = await getFeedDays();
+      const created = await insertFeedDayAtStorage(newDay, 0);
+      const updated = sortDaysLatestFirst(await getFeedDays());
       setDays(updated);
       return created;
     },
@@ -105,20 +111,20 @@ export function FeedDaysProvider({ children }: { children: React.ReactNode }) {
 
   const insertDayAt = useCallback(
     async (index: number, day?: Omit<FeedDay, "id">): Promise<FeedDay> => {
-      const current = await getFeedDays();
+      const current = sortDaysLatestFirst(await getFeedDays());
       const clamped = Math.max(0, Math.min(index, current.length));
       const defaultDate = (() => {
         if (current.length === 0) return formatDateStr(new Date());
-        if (clamped === 0) return addDaysToDate(current[0]!.date, -1);
+        if (clamped === 0) return addDaysToDate(current[0]!.date, 1);
         if (clamped >= current.length) {
-          return addDaysToDate(current[current.length - 1]!.date, 1);
+          return addDaysToDate(current[current.length - 1]!.date, -1);
         }
         const prev = current[clamped - 1]!.date;
-        return addDaysToDate(prev, 1);
+        return addDaysToDate(prev, -1);
       })();
       const newDay = day ?? createEmptyFeedDay(defaultDate);
       const created = await insertFeedDayAtStorage(newDay, clamped);
-      const updated = await getFeedDays();
+      const updated = sortDaysLatestFirst(await getFeedDays());
       setDays(updated);
       return created;
     },
@@ -132,7 +138,7 @@ export function FeedDaysProvider({ children }: { children: React.ReactNode }) {
       if (idx === -1) return prev;
       const next = [...prev];
       next[idx] = { ...next[idx]!, ...updates, id };
-      return next;
+      return sortDaysLatestFirst(next);
     });
   }, []);
 
@@ -153,8 +159,9 @@ export function FeedDaysProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const replaceAll = useCallback(async (newDays: FeedDay[]): Promise<void> => {
-    await setFeedDays(newDays);
-    setDays(newDays);
+    const ordered = sortDaysLatestFirst(newDays);
+    await setFeedDays(ordered);
+    setDays(ordered);
   }, []);
 
   const toggleEaten = useCallback(
@@ -174,10 +181,11 @@ export function FeedDaysProvider({ children }: { children: React.ReactNode }) {
       sync.runWithSyncing(async () => {
         const result = await pullFeedDays();
         if (result.ok && result.days) {
+          const ordered = sortDaysLatestFirst(result.days);
           sync.requestSkipNextAutoPush();
-          await setFeedDays(result.days);
-          setDays(result.days);
-          sync.markSnapshotPushed(JSON.stringify(result.days));
+          await setFeedDays(ordered);
+          setDays(ordered);
+          sync.markSnapshotPushed(JSON.stringify(ordered));
         } else if (!result.ok) {
           raiseError(result.text);
         }
