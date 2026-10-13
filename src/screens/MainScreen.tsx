@@ -32,9 +32,12 @@ import {
 } from "../components/SuggestionChips";
 import { useInlineMealEdit } from "../hooks/useInlineMealEdit";
 
+function sumMealGrams(entries: MealEntry[]): number {
+  return entries.reduce((s, e) => s + e.grams, 0);
+}
+
 function totalGramsForDay(day: FeedDay): number {
-  const sum = (arr: MealEntry[]) => arr.reduce((s, e) => s + e.grams, 0);
-  return sum(day.morning) + sum(day.lunch) + sum(day.evening);
+  return sumMealGrams(day.morning) + sumMealGrams(day.lunch) + sumMealGrams(day.evening);
 }
 
 function uniqueProductsForDay(day: FeedDay): number {
@@ -226,9 +229,15 @@ export function MainScreen() {
                   isEaten && { backgroundColor: colors.pastelGreen },
                 ]}
               >
-                <Text style={[s.mealTypeLabel, { color: colors.textMuted }]}>
-                  {mealLabel(type)}
-                </Text>
+                <View style={s.mealTypeRow}>
+                  <Text style={[s.mealTypeLabel, { color: colors.textMuted }]}>
+                    {mealLabel(type)}
+                  </Text>
+                  <Text style={[s.mealTypeTotal, { color: colors.textMuted }]}>
+                    {sumMealGrams(meals)}
+                    {t("grams")}
+                  </Text>
+                </View>
                 {meals.map((entry, idx) => {
                   const productKey = inlineEdit.fieldKey(todayDay.id, type, idx, "product");
                   const gramsKey = inlineEdit.fieldKey(todayDay.id, type, idx, "grams");
@@ -428,10 +437,19 @@ function useStyles(colors: {
           padding: 18,
           marginBottom: 12,
         },
+        mealTypeRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 8,
+        },
         mealTypeLabel: {
           fontSize: 13,
           fontFamily: fonts.regular,
-          marginBottom: 8,
+        },
+        mealTypeTotal: {
+          fontSize: 13,
+          fontFamily: fonts.medium,
         },
         mealEntry: {
           flexDirection: "row",
