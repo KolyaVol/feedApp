@@ -1,13 +1,27 @@
-import React from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Text, TextInput, TouchableOpacity, View } from "react-native";
 import type { FeedDay, MealType } from "../../types";
 import {
   GramSuggestionChips,
   ProductSuggestionChips,
 } from "../../components/SuggestionChips";
+import {
+  getGramSuggestions as computeGramSuggestions,
+  rankProductSuggestions,
+} from "../../utils/mealSuggestions";
 import type { DataScreenStyles } from "./styles";
 
 const MEAL_TYPES: MealType[] = ["morning", "lunch", "evening"];
+
+type MealsState = Pick<FeedDay, "morning" | "lunch" | "evening">;
+
+function cloneMeals(day: FeedDay): MealsState {
+  return {
+    morning: day.morning.map((e) => ({ ...e })),
+    lunch: day.lunch.map((e) => ({ ...e })),
+    evening: day.evening.map((e) => ({ ...e })),
+  };
+}
 
 export interface DayRowColors {
   text: string;
@@ -22,7 +36,7 @@ export interface DayRowColors {
   placeholder: string;
 }
 
-interface DayRowProps {
+export interface DayRowProps {
   day: FeedDay;
   isToday: boolean;
   styles: DataScreenStyles;
@@ -33,9 +47,9 @@ interface DayRowProps {
   onDateChange: (dayId: string, value: string) => void;
   onDateBlur: (day: FeedDay) => void;
   onOpenActions: (dayId: string) => void;
-  onUpdateNotes: (dayId: string, notes: string) => void;
+  onCommitNotes: (dayId: string, notes: string) => void;
   onOpenAddProduct: (dayId: string, mealType: MealType) => void;
-  onUpdateMealEntry: (
+  onCommitMealEntry: (
     dayId: string,
     mealType: MealType,
     idx: number,
@@ -43,17 +57,12 @@ interface DayRowProps {
     value: string,
   ) => void;
   onRemoveMealEntry: (dayId: string, mealType: MealType, idx: number) => void;
-  onFocusProductField: (key: string | null) => void;
-  onFocusGramsField: (key: string | null) => void;
-  activeProductField: string | null;
-  activeGramsField: string | null;
-  productSuggestions: (value: string) => string[];
-  gramSuggestions: (raw: string, fallback: number) => number[];
-  recentTopGrams: number;
+  recentProducts: string[];
+  recentGrams: number[];
   mealLabel: (type: MealType) => string;
 }
 
-export function DayRow({
+function DayRowComponent({
   day,
   isToday,
   styles: s,
@@ -64,20 +73,126 @@ export function DayRow({
   onDateChange,
   onDateBlur,
   onOpenActions,
-  onUpdateNotes,
+  onCommitNotes,
   onOpenAddProduct,
-  onUpdateMealEntry,
+  onCommitMealEntry,
   onRemoveMealEntry,
-  onFocusProductField,
-  onFocusGramsField,
-  activeProductField,
-  activeGramsField,
-  productSuggestions,
-  gramSuggestions,
-  recentTopGrams,
+  recentProducts,
+  recentGrams,
   mealLabel,
 }: DayRowProps) {
+  const [meals, setMeals] = useState<MealsState>(() => cloneMeals(day));
+  const [notes, setNotes] = useState(day.notes ?? "");
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const productChipTapRef = useRef(false);
+  const gramChipTapRef = useRef(false);
+
+  useEffect(() => {
+    setMeals(cloneMeals(day));
+    setNotes(day.notes ?? "");
+  }, [day]);
+
+  const recentTopGrams = recentGrams[0] ?? 0;
+
+  const getProductSuggestions = useCallback(
+    (value: string) =>
+      rankProductSuggestions(value, recentProducts, "emptyReturnsAll"),
+    [recentProducts],
+  );
+
+  const getGramSuggestions = useCallback(
+    (raw: string, fallback: number) =>
+      computeGramSuggestions(raw, fallback, recentGrams),
+    [recentGrams],
+  );
+
+  const updateMealField = useCallback(
+    (mealType: MealType, idx: number, field: "product" | "grams", value: string) => {
+      setMeals((prev) => {
+        const list = [...prev[mealType]];
+        const entry = list[idx];
+        if (!entry) return prev;
+        if (field === "product") {
+          list[idx] = { ...entry, product: value };
+        } else {
+          const n = parseInt(value, 10);
+          list[idx] = { ...entry, grams: isNaN(n) ? 0 : n };
+        }
+        return { ...prev, [mealType]: list };
+      });
+    },
+    [],
+  );
+
+  const commitMealField = useCallback(
+    (mealType: MealType, idx: number, field: "product" | "grams") => {
+      const local = meals[mealType][idx];
+      const committed = day[mealType][idx];
+      if (!local || !committed) return;
+      if (field === "product") {
+        if (local.product !== committed.product) {
+          onCommitMealEntry(day.id, mealType, idx, "product", local.product);
+        }
+      } else {
+        const localGrams = local.grams > 0 ? String(local.grams) : "";
+        const committedGrams = committed.grams > 0 ? String(committed.grams) : "";
+        if (localGrams !== committedGrams) {
+          onCommitMealEntry(day.id, mealType, idx, "grams", localGrams);
+        }
+      }
+    },
+    [day, meals, onCommitMealEntry],
+  );
+
+  const handleProductBlur = useCallback(
+    (mealType: MealType, idx: number, fieldKey: string) => {
+      if (productChipTapRef.current) {
+        productChipTapRef.current = false;
+        return;
+      }
+      if (focusedField === fieldKey) setFocusedField(null);
+      commitMealField(mealType, idx, "product");
+    },
+    [commitMealField, focusedField],
+  );
+
+  const handleGramsBlur = useCallback(
+    (mealType: MealType, idx: number, fieldKey: string) => {
+      if (gramChipTapRef.current) {
+        gramChipTapRef.current = false;
+        return;
+      }
+      if (focusedField === fieldKey) setFocusedField(null);
+      commitMealField(mealType, idx, "grams");
+    },
+    [commitMealField, focusedField],
+  );
+
+  const handleNotesBlur = useCallback(() => {
+    const committed = day.notes ?? "";
+    if (notes !== committed) onCommitNotes(day.id, notes);
+  }, [day.id, day.notes, notes, onCommitNotes]);
+
+  const applyProductSuggestion = useCallback(
+    (mealType: MealType, idx: number, suggestion: string) => {
+      updateMealField(mealType, idx, "product", suggestion);
+      onCommitMealEntry(day.id, mealType, idx, "product", suggestion);
+      setFocusedField(null);
+    },
+    [day.id, onCommitMealEntry, updateMealField],
+  );
+
+  const applyGramSuggestion = useCallback(
+    (mealType: MealType, idx: number, gram: number) => {
+      updateMealField(mealType, idx, "grams", String(gram));
+      onCommitMealEntry(day.id, mealType, idx, "grams", String(gram));
+      setFocusedField(null);
+    },
+    [day.id, onCommitMealEntry, updateMealField],
+  );
+
   const cardInputBorderColor = isToday ? colors.border : colors.borderLight;
+
   return (
     <View
       style={[
@@ -106,20 +221,23 @@ export function DayRow({
       </View>
 
       {MEAL_TYPES.map((type) => {
-        const meals = day[type];
-        if (meals.length === 0) return null;
+        const entries = meals[type];
+        if (entries.length === 0) return null;
         return (
           <View key={type} style={s.mealSection}>
             <Text style={[s.mealTitle, { color: colors.textMuted }]}>{mealLabel(type)}</Text>
-            {meals.map((entry, idx) => {
-              const fieldKey = `${day.id}:${type}:${idx}`;
+            {entries.map((entry, idx) => {
+              const productKey = `${day.id}:${type}:${idx}:product`;
+              const gramsKey = `${day.id}:${type}:${idx}:grams`;
               return (
                 <View key={idx} style={s.mealEntryRow}>
                   <TextInput
                     style={[s.cellInput, s.cellProduct, { color: colors.text, borderColor: cardInputBorderColor }]}
                     value={entry.product}
-                    onChangeText={(v) => onUpdateMealEntry(day.id, type, idx, "product", v)}
-                    onFocus={() => onFocusProductField(fieldKey)}
+                    onChangeText={(v) => updateMealField(type, idx, "product", v)}
+                    onFocus={() => setFocusedField(productKey)}
+                    onBlur={() => handleProductBlur(type, idx, productKey)}
+                    onSubmitEditing={() => handleProductBlur(type, idx, productKey)}
                     placeholder={t("product")}
                     placeholderTextColor={colors.placeholder}
                   />
@@ -131,8 +249,10 @@ export function DayRow({
                       (isNaN(entry.grams) || entry.grams < 0) && { borderColor: colors.danger },
                     ]}
                     value={entry.grams > 0 ? String(entry.grams) : ""}
-                    onChangeText={(v) => onUpdateMealEntry(day.id, type, idx, "grams", v)}
-                    onFocus={() => onFocusGramsField(fieldKey)}
+                    onChangeText={(v) => updateMealField(type, idx, "grams", v)}
+                    onFocus={() => setFocusedField(gramsKey)}
+                    onBlur={() => handleGramsBlur(type, idx, gramsKey)}
+                    onSubmitEditing={() => handleGramsBlur(type, idx, gramsKey)}
                     keyboardType="numeric"
                     placeholder="0"
                     placeholderTextColor={colors.placeholder}
@@ -143,24 +263,26 @@ export function DayRow({
                   >
                     <Text style={[s.removeEntryText, { color: colors.danger }]}>×</Text>
                   </TouchableOpacity>
-                  {activeProductField === fieldKey && (
+                  {focusedField === productKey && (
                     <ProductSuggestionChips
-                      suggestions={productSuggestions(entry.product)}
-                      onSelect={(suggestion) =>
-                        onUpdateMealEntry(day.id, type, idx, "product", suggestion)
-                      }
+                      suggestions={getProductSuggestions(entry.product)}
+                      onPressIn={() => {
+                        productChipTapRef.current = true;
+                      }}
+                      onSelect={(suggestion) => applyProductSuggestion(type, idx, suggestion)}
                     />
                   )}
-                  {activeGramsField === fieldKey && (
+                  {focusedField === gramsKey && (
                     <GramSuggestionChips
-                      suggestions={gramSuggestions(
+                      suggestions={getGramSuggestions(
                         entry.grams > 0 ? String(entry.grams) : "",
                         recentTopGrams,
                       )}
-                      keyPrefix={`${fieldKey}:`}
-                      onSelect={(gram) =>
-                        onUpdateMealEntry(day.id, type, idx, "grams", String(gram))
-                      }
+                      keyPrefix={`${gramsKey}:`}
+                      onPressIn={() => {
+                        gramChipTapRef.current = true;
+                      }}
+                      onSelect={(gram) => applyGramSuggestion(type, idx, gram)}
                     />
                   )}
                 </View>
@@ -175,8 +297,9 @@ export function DayRow({
 
       <TextInput
         style={[s.cellInput, s.cellNotes, { color: colors.text, borderColor: cardInputBorderColor }]}
-        value={day.notes}
-        onChangeText={(v) => onUpdateNotes(day.id, v)}
+        value={notes}
+        onChangeText={setNotes}
+        onBlur={handleNotesBlur}
         placeholder={t("notes")}
         placeholderTextColor={colors.placeholder}
         multiline
@@ -184,3 +307,17 @@ export function DayRow({
     </View>
   );
 }
+
+function propsAreEqual(prev: DayRowProps, next: DayRowProps): boolean {
+  return (
+    prev.day === next.day &&
+    prev.isToday === next.isToday &&
+    prev.dateDraft === next.dateDraft &&
+    prev.recentProducts === next.recentProducts &&
+    prev.recentGrams === next.recentGrams &&
+    prev.styles === next.styles &&
+    prev.colors === next.colors
+  );
+}
+
+export const DayRow = React.memo(DayRowComponent, propsAreEqual);

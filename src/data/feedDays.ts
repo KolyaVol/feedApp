@@ -73,7 +73,7 @@ export function createEmptyFeedDay(date: string): Omit<FeedDay, "id"> {
     date,
     morning: [{ product: "", grams: 0 }],
     lunch: [{ product: "", grams: 0 }],
-    evening: [],
+    evening: [{ product: "", grams: 0 }],
     notes: "",
   };
 }
