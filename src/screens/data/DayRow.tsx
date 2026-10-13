@@ -84,8 +84,19 @@ function DayRowComponent({
   const [meals, setMeals] = useState<MealsState>(() => cloneMeals(day));
   const [notes, setNotes] = useState(day.notes ?? "");
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const mealsRef = useRef(meals);
+  mealsRef.current = meals;
   const productChipTapRef = useRef(false);
   const gramChipTapRef = useRef(false);
+  const productBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gramBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (productBlurTimer.current) clearTimeout(productBlurTimer.current);
+      if (gramBlurTimer.current) clearTimeout(gramBlurTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     setMeals(cloneMeals(day));
@@ -118,7 +129,9 @@ function DayRowComponent({
           const n = parseInt(value, 10);
           list[idx] = { ...entry, grams: isNaN(n) ? 0 : n };
         }
-        return { ...prev, [mealType]: list };
+        const next = { ...prev, [mealType]: list };
+        mealsRef.current = next;
+        return next;
       });
     },
     [],
@@ -126,7 +139,7 @@ function DayRowComponent({
 
   const commitMealField = useCallback(
     (mealType: MealType, idx: number, field: "product" | "grams") => {
-      const local = meals[mealType][idx];
+      const local = mealsRef.current[mealType][idx];
       const committed = day[mealType][idx];
       if (!local || !committed) return;
       if (field === "product") {
@@ -141,31 +154,39 @@ function DayRowComponent({
         }
       }
     },
-    [day, meals, onCommitMealEntry],
+    [day, onCommitMealEntry],
   );
 
   const handleProductBlur = useCallback(
     (mealType: MealType, idx: number, fieldKey: string) => {
-      if (productChipTapRef.current) {
-        productChipTapRef.current = false;
-        return;
-      }
-      if (focusedField === fieldKey) setFocusedField(null);
-      commitMealField(mealType, idx, "product");
+      if (productBlurTimer.current) clearTimeout(productBlurTimer.current);
+      productBlurTimer.current = setTimeout(() => {
+        productBlurTimer.current = null;
+        if (productChipTapRef.current) {
+          productChipTapRef.current = false;
+          return;
+        }
+        setFocusedField((current) => (current === fieldKey ? null : current));
+        commitMealField(mealType, idx, "product");
+      }, 200);
     },
-    [commitMealField, focusedField],
+    [commitMealField],
   );
 
   const handleGramsBlur = useCallback(
     (mealType: MealType, idx: number, fieldKey: string) => {
-      if (gramChipTapRef.current) {
-        gramChipTapRef.current = false;
-        return;
-      }
-      if (focusedField === fieldKey) setFocusedField(null);
-      commitMealField(mealType, idx, "grams");
+      if (gramBlurTimer.current) clearTimeout(gramBlurTimer.current);
+      gramBlurTimer.current = setTimeout(() => {
+        gramBlurTimer.current = null;
+        if (gramChipTapRef.current) {
+          gramChipTapRef.current = false;
+          return;
+        }
+        setFocusedField((current) => (current === fieldKey ? null : current));
+        commitMealField(mealType, idx, "grams");
+      }, 200);
     },
-    [commitMealField, focusedField],
+    [commitMealField],
   );
 
   const handleNotesBlur = useCallback(() => {
@@ -175,20 +196,44 @@ function DayRowComponent({
 
   const applyProductSuggestion = useCallback(
     (mealType: MealType, idx: number, suggestion: string) => {
-      updateMealField(mealType, idx, "product", suggestion);
+      productChipTapRef.current = true;
+      if (productBlurTimer.current) {
+        clearTimeout(productBlurTimer.current);
+        productBlurTimer.current = null;
+      }
+      const prev = mealsRef.current;
+      const list = [...prev[mealType]];
+      const entry = list[idx];
+      if (!entry) return;
+      list[idx] = { ...entry, product: suggestion };
+      const next = { ...prev, [mealType]: list };
+      mealsRef.current = next;
+      setMeals(next);
       onCommitMealEntry(day.id, mealType, idx, "product", suggestion);
       setFocusedField(null);
     },
-    [day.id, onCommitMealEntry, updateMealField],
+    [day.id, onCommitMealEntry],
   );
 
   const applyGramSuggestion = useCallback(
     (mealType: MealType, idx: number, gram: number) => {
-      updateMealField(mealType, idx, "grams", String(gram));
+      gramChipTapRef.current = true;
+      if (gramBlurTimer.current) {
+        clearTimeout(gramBlurTimer.current);
+        gramBlurTimer.current = null;
+      }
+      const prev = mealsRef.current;
+      const list = [...prev[mealType]];
+      const entry = list[idx];
+      if (!entry) return;
+      list[idx] = { ...entry, grams: gram };
+      const next = { ...prev, [mealType]: list };
+      mealsRef.current = next;
+      setMeals(next);
       onCommitMealEntry(day.id, mealType, idx, "grams", String(gram));
       setFocusedField(null);
     },
-    [day.id, onCommitMealEntry, updateMealField],
+    [day.id, onCommitMealEntry],
   );
 
   const cardInputBorderColor = isToday ? colors.border : colors.borderLight;
@@ -230,39 +275,41 @@ function DayRowComponent({
               const productKey = `${day.id}:${type}:${idx}:product`;
               const gramsKey = `${day.id}:${type}:${idx}:grams`;
               return (
-                <View key={idx} style={s.mealEntryRow}>
-                  <TextInput
-                    style={[s.cellInput, s.cellProduct, { color: colors.text, borderColor: cardInputBorderColor }]}
-                    value={entry.product}
-                    onChangeText={(v) => updateMealField(type, idx, "product", v)}
-                    onFocus={() => setFocusedField(productKey)}
-                    onBlur={() => handleProductBlur(type, idx, productKey)}
-                    onSubmitEditing={() => handleProductBlur(type, idx, productKey)}
-                    placeholder={t("product")}
-                    placeholderTextColor={colors.placeholder}
-                  />
-                  <TextInput
-                    style={[
-                      s.cellInput,
-                      s.cardGramsInput,
-                      { color: colors.text, borderColor: cardInputBorderColor },
-                      (isNaN(entry.grams) || entry.grams < 0) && { borderColor: colors.danger },
-                    ]}
-                    value={entry.grams > 0 ? String(entry.grams) : ""}
-                    onChangeText={(v) => updateMealField(type, idx, "grams", v)}
-                    onFocus={() => setFocusedField(gramsKey)}
-                    onBlur={() => handleGramsBlur(type, idx, gramsKey)}
-                    onSubmitEditing={() => handleGramsBlur(type, idx, gramsKey)}
-                    keyboardType="numeric"
-                    placeholder="0"
-                    placeholderTextColor={colors.placeholder}
-                  />
-                  <TouchableOpacity
-                    style={s.removeEntryBtn}
-                    onPress={() => onRemoveMealEntry(day.id, type, idx)}
-                  >
-                    <Text style={[s.removeEntryText, { color: colors.danger }]}>×</Text>
-                  </TouchableOpacity>
+                <View key={idx} style={s.mealEntryBlock}>
+                  <View style={s.mealEntryRow}>
+                    <TextInput
+                      style={[s.cellInput, s.cellProduct, { color: colors.text, borderColor: cardInputBorderColor }]}
+                      value={entry.product}
+                      onChangeText={(v) => updateMealField(type, idx, "product", v)}
+                      onFocus={() => setFocusedField(productKey)}
+                      onBlur={() => handleProductBlur(type, idx, productKey)}
+                      onSubmitEditing={() => handleProductBlur(type, idx, productKey)}
+                      placeholder={t("product")}
+                      placeholderTextColor={colors.placeholder}
+                    />
+                    <TextInput
+                      style={[
+                        s.cellInput,
+                        s.cardGramsInput,
+                        { color: colors.text, borderColor: cardInputBorderColor },
+                        (isNaN(entry.grams) || entry.grams < 0) && { borderColor: colors.danger },
+                      ]}
+                      value={entry.grams > 0 ? String(entry.grams) : ""}
+                      onChangeText={(v) => updateMealField(type, idx, "grams", v)}
+                      onFocus={() => setFocusedField(gramsKey)}
+                      onBlur={() => handleGramsBlur(type, idx, gramsKey)}
+                      onSubmitEditing={() => handleGramsBlur(type, idx, gramsKey)}
+                      keyboardType="numeric"
+                      placeholder="0"
+                      placeholderTextColor={colors.placeholder}
+                    />
+                    <TouchableOpacity
+                      style={s.removeEntryBtn}
+                      onPress={() => onRemoveMealEntry(day.id, type, idx)}
+                    >
+                      <Text style={[s.removeEntryText, { color: colors.danger }]}>×</Text>
+                    </TouchableOpacity>
+                  </View>
                   {focusedField === productKey && (
                     <ProductSuggestionChips
                       suggestions={getProductSuggestions(entry.product)}

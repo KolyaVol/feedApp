@@ -1,7 +1,23 @@
 import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View, type ViewStyle } from "react-native";
+import {
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  type ViewStyle,
+} from "react-native";
 import { useTheme } from "../contexts/ThemeContext";
 import { fonts, spacing } from "../theme";
+
+const webMouseDownProps =
+  Platform.OS === "web"
+    ? ({
+        onMouseDown: (event: { preventDefault: () => void }) => {
+          event.preventDefault();
+        },
+      } as Record<string, unknown>)
+    : {};
 
 interface ProductSuggestionChipsProps {
   suggestions: string[];
@@ -33,6 +49,7 @@ export function ProductSuggestionChips({
           style={[styles.suggestionChip, { backgroundColor: colors.chipBg }]}
           onPressIn={onPressIn}
           onPress={() => onSelect(suggestion)}
+          {...webMouseDownProps}
         >
           <Text style={[styles.suggestionChipText, { color: colors.text }]}>
             {suggestion}
@@ -73,6 +90,7 @@ export function GramSuggestionChips({
           style={[styles.gramChip, { backgroundColor: colors.chipBg }]}
           onPressIn={onPressIn}
           onPress={() => onSelect(gram)}
+          {...webMouseDownProps}
         >
           <Text style={[styles.gramChipText, { color: colors.text }]}>{gram}</Text>
         </TouchableOpacity>

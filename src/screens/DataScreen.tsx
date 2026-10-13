@@ -424,6 +424,7 @@ export function DataScreen() {
         ListEmptyComponent={listEmpty}
         contentContainerStyle={listContentPadding}
         extraData={dateDrafts.drafts}
+        keyboardShouldPersistTaps="handled"
         windowSize={7}
         maxToRenderPerBatch={8}
         initialNumToRender={6}

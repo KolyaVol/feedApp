@@ -83,13 +83,15 @@ export function useDataScreenStyles(colors: DataScreenColors, width: number) {
           fontSize: 12,
           fontFamily: fonts.medium,
         },
+        mealEntryBlock: {
+          width: "100%",
+          marginBottom: 2,
+        },
         mealEntryRow: {
           flexDirection: "row",
           alignItems: "center",
           width: "100%",
           gap: 6,
-          marginBottom: 2,
-          flexWrap: "wrap",
         },
         removeEntryBtn: {
           width: 22,
